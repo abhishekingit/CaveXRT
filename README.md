@@ -30,3 +30,14 @@ Submodules in `GL/` and built via `add_subdirectory`:
 <img alt="UtahTeapot.gif" src="https://github.com/abhishekingit/CaveXRT/blob/main/results/modelload.gif?raw=true" data-hpc="true" class="Box-sc-g0xbh4-0 kzRgrI" height="512px">
 
 A simple teapot model, Shaders can be recompiled using F6 key. 
+
+
+### Blinn Shading and lighting 
+
+<img alt="blinnshade.gif" src="https://github.com/abhishekingit/CaveXRT/blob/main/results/blinnshade.gif?raw=true" data-hpc="true" class="Box-sc-g0xbh4-0 kzRgrI" height="512px">
+
+Blinn shading done in view space with movable light source.
+
+<img alt="rimlight.gif" src="https://github.com/abhishekingit/CaveXRT/blob/main/results/rimlight.gif?raw=true" data-hpc="true" class="Box-sc-g0xbh4-0 kzRgrI" height="512px">
+
+Rim lighting added on top of Blinn shading

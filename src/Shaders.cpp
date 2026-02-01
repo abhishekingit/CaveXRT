@@ -89,15 +89,23 @@ void Shader::use() const {
 }
 
 void Shader::setBool(const char* uniformName, bool value) const{
-	std::cout << "To be implemented" << std::endl;
+	glUniform1i(glGetUniformLocation(ShaderID, uniformName), (int)value);
 }
 
 void Shader::setInt(const char* uniformName, int value) const {
-	std::cout << "To be implemented" << std::endl;
+	glUniform1i(glGetUniformLocation(ShaderID, uniformName), value);
 }
 
 void Shader::setFloat(const char* uniformName, float value) const {
-	std::cout << "To be implemented" << std::endl;
+	glUniform1f(glGetUniformLocation(ShaderID, uniformName), value);
+}
+
+void Shader::setVec3(const char* uniformName, const glm::vec3& vec) const {
+	glUniform3fv(glGetUniformLocation(ShaderID, uniformName), 1, &vec[0]);
+}
+
+void Shader::setVec3(const char* uniformName, float x, float y, float z) const {
+	glUniform3f(glGetUniformLocation(ShaderID, uniformName), x, y, z);
 }
 
 void Shader::setMat4(const char* uniformName, const glm::mat4& mat) const {

@@ -8,8 +8,8 @@
 
 struct Vertex {
 	glm::vec3 position;
-	//will add other attributes later
-	/*glm::vec3 normal;*/
+	glm::vec3 normals;
+	//more attributes will be added later
 };
 
 class Mesh {
