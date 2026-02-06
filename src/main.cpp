@@ -13,7 +13,7 @@ float distance = 5.0f;
 
 float lightYaw = 0.0f;
 float lightPitch = 0.3f;
-float lightRadius = 3.0f;
+float lightRadius = 2.0f;
 
 double lastX = 0.0f, lastY = 0.0f;
 bool leftMousePressed = false;
@@ -141,7 +141,7 @@ int main() {
 	}
 
 	Shader shaderprog1("../../../src/Shaders/vshader.vert", "../../../src/Shaders/fshader.frag");
-	//Shader shaderprog2("../../../src/Shaders/cubevshader.vert", "../../../src/Shaders/cubefshader.frag");
+	Shader shaderprog2("../../../src/Shaders/cubevshader.vert", "../../../src/Shaders/cubefshader.frag");
 
 	glfwSetWindowUserPointer(window, &shaderprog1);
 
@@ -159,7 +159,7 @@ int main() {
 	
 
 	ModelLoader teapotModel("../../../assets/models/teapot.obj");
-	//ModelLoader cubeModel("../../../assets/models/cube.obj");
+	ModelLoader cubeModel("../../../assets/models/cube.obj");
 
 	//Computing Model bounding box and center
 	glm::vec3 modelBoxMin(FLT_MAX);
@@ -225,16 +225,16 @@ int main() {
 		
 		teapotModel.Draw(shaderprog1);
 
-		//shaderprog2.use();
-		//glm::mat4 lightModel = glm::mat4(1.0f);
-		////lightModel = glm::translate(lightModel, lightPosWorld);
-		//lightModel = glm::scale(lightModel, glm::vec3(0.5f));
+		shaderprog2.use();
+		glm::mat4 lightModel = glm::mat4(1.0f);
+		lightModel = glm::translate(lightModel, lightPosWorld);
+		lightModel = glm::scale(lightModel, glm::vec3(0.02f));
 
-		//glm::mat4 lightMVP = perspectiveProjection * view * lightModel;
-		//shaderprog2.setMat4("mvp", lightMVP);
-		//shaderprog2.setVec3("lightColor", lightColor);
+		glm::mat4 lightMVP = perspectiveProjection * view * lightModel;
+		shaderprog2.setMat4("mvp", lightMVP);
+		shaderprog2.setVec3("lightColor", lightColor);
 
-		//cubeModel.Draw(shaderprog2);
+		cubeModel.Draw(shaderprog2);
 
 		glfwSwapBuffers(window);
 

@@ -19,10 +19,13 @@ Mesh ModelLoader::processMesh(aiMesh* mesh, const aiScene* scene) {
 	std::vector<uint32_t> indices;
 
 	for (uint32_t i = 0; i < mesh->mNumVertices; i++) {
-		Vertex vert{
-			.position = glm::vec3(mesh->mVertices[i].x, mesh->mVertices[i].y, mesh->mVertices[i].z),
-			.normals = glm::vec3(mesh->mNormals[i].x, mesh->mNormals[i].y, mesh->mNormals[i].z)
-		};
+		Vertex vert;
+		vert.position = glm::vec3(mesh->mVertices[i].x, mesh->mVertices[i].y, mesh->mVertices[i].z);
+
+		if (mesh->HasNormals()) {
+			vert.normals = glm::vec3(mesh->mNormals[i].x, mesh->mNormals[i].y, mesh->mNormals[i].z);
+		}
+		
 		vertices.push_back(vert);
 	}
 
