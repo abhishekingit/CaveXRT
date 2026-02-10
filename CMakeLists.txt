@@ -18,7 +18,8 @@ src/Shaders.cpp
 src/Mesh.h
 src/Mesh.cpp
 src/ModelLoader.h
-src/ModelLoader.cpp)
+src/ModelLoader.cpp
+GL/lodepng/lodepng.cpp)
 
 target_link_libraries(CaveXRT glfw glad glm assimp)
 
@@ -28,4 +29,5 @@ target_include_directories(
     GL/glfw/include
     GL/glm
     GL/assimp/include
+    GL/lodepng
 )

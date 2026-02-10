@@ -2,6 +2,7 @@
 
 in vec3 FragPos;
 in vec3 Normal;
+in vec2 TexCoords;
 	
 out vec4 outputColor;
 
@@ -13,6 +14,14 @@ struct Material {
 	float ambientIntensity;
 	float specularIntensity;
 	float glossiness;
+
+	bool hasDiffuseMap;
+	bool hasSpecularMap;
+	bool hasBumpMap;
+
+	sampler2D map_Ka;
+	sampler2D map_Kd;
+	sampler2D map_Ks;
 };
 
 struct Light {
@@ -33,13 +42,19 @@ void main() {
 	float cosTheta = max(dot(norm, lightDir), 0.0);
 	float cosAlpha = max(dot(norm, halfVec), 0.0);
 
-	vec3 ambient = material.ambient * material.ambientIntensity * light.color;
-	vec3 diffuse = material.diffuse * cosTheta * light.color;
-	vec3 specular = material.specular * pow(cosAlpha, material.glossiness) * material.specularIntensity * light.color;
+	vec3 baseColor = material.hasDiffuseMap ? texture(material.map_Kd, TexCoords).rgb : material.diffuse;
 
-	float rim = 1.0 - max(dot(viewDir, norm), 0.0);
-	rim = pow(rim, 2.0);
-	vec3 rimColor = rim * vec3(0.1, 0.4, 0.5) * 0.5;
+	vec3 ambient = baseColor * material.ambientIntensity * light.color;
+	vec3 diffuse = baseColor * cosTheta * light.color;
 
-	outputColor = vec4(ambient + diffuse + specular + rimColor, 1.0);
+	vec3 specMask = material.hasSpecularMap ? texture(material.map_Ks, TexCoords).rgb : material.specular; 
+	vec3 specularColor = material.specularIntensity * specMask;
+	vec3 specular = vec3(0.0);
+	if(cosTheta > 0.0) {
+		specular =  specularColor * pow(cosAlpha, material.glossiness) * light.color;
+	}
+		
+
+	outputColor = vec4(ambient + diffuse + specular, 1.0);
+//	outputColor = vec4(fract(TexCoords), 0.0, 1.0);
 }

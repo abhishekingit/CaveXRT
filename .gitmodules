@@ -7,3 +7,6 @@
 [submodule "GL/assimp"]
 	path = GL/assimp
 	url = https://github.com/assimp/assimp.git
+[submodule "GL/lodepng"]
+	path = GL/lodepng
+	url = https://github.com/lvandeve/lodepng.git

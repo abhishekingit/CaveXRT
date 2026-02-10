@@ -31,6 +31,12 @@ float ambientIntensity = 0.2;
 float specularIntensity = 1.0;
 float glossiness = 128;
 
+struct AppConfig {
+	int width = 800;
+	int height = 600;
+	std::string modelPath;
+};
+
 void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
 	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
 		glfwSetWindowShouldClose(window, true);
@@ -118,11 +124,48 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
 	glViewport(0, 0, width, height);
 }
 
-int main() {
+bool parseArguments(int argc, char* argv[], AppConfig& config) {
+	for (int i = 1; i < argc; i++) {
+		std::string arg = argv[i];
+		std::cout << "Parsing argument: " << arg << "\n";
+		if (arg == "--width" && i + 1 < argc) {
+			config.width = std::stoi(argv[++i]);
+		}
+		else if (arg == "--height" && i + 1 < argc) {
+			config.height = std::stoi(argv[++i]);
+		}
+		else if (arg == "--help") {
+			std::cout << "Usage: \n" << " CaveXRT.exe [options] <model.obj> \n\n" << "Options: \n" << "--width <int> Window width(default 800) \n" << "--height <int> Window height(default 600) \n";
+			return false;
+		}
+		else {
+			config.modelPath = arg;
+		}
+	}
+
+	if (config.modelPath.empty()) {
+		std::cerr << "Error: no obj file specified\n";
+		return false;
+	}
+
+	return true;
+}
+
+
+int main(int argc, char* argv[]) {
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
+	AppConfig config;
+	if (!parseArguments(argc, argv, config)) {
+		return -1;
+	}
+
+	std::cout << "Loading model: " << config.modelPath << "\n";
+	std::cout << "Window size: " << config.width << "x" << config.height << "\n";
+	
 
 	GLFWwindow* window = glfwCreateWindow(800, 600, "CaveXRT", NULL, NULL);
 	if (!window) {
@@ -156,21 +199,29 @@ int main() {
 
 	glEnable(GL_DEPTH_TEST);
 	
-	
+	//Parse arguments for obj model
 
-	ModelLoader teapotModel("../../../assets/models/teapot.obj");
+	//ModelLoader teapotModel("../../../assets/models/yoda/yoda.obj");
+	ModelLoader mainModel(config.modelPath);
 	ModelLoader cubeModel("../../../assets/models/cube.obj");
 
 	//Computing Model bounding box and center
 	glm::vec3 modelBoxMin(FLT_MAX);
 	glm::vec3 modelBoxMax(-FLT_MAX);
 
-	for (const Mesh& mesh : teapotModel.meshes) {
+	for (const Mesh& mesh : mainModel.meshes) {
 		modelBoxMin = glm::min(modelBoxMin, mesh.getBoxMin());
 		modelBoxMax = glm::max(modelBoxMax, mesh.getBoxMax());
 	}
 
 	glm::vec3 modelCenter = (modelBoxMin + modelBoxMax) * 0.5f;
+	glm::vec3 modelSize = modelBoxMax - modelBoxMin;
+	float modelRadius = glm::length(modelSize) * 0.5f;
+	float maxExtent = glm::max(modelSize.x, glm::max(modelSize.y, modelSize.z));
+	float scaleFactor = 1.0f / modelRadius;
+
+	/*distance = modelRadius * 2.5f;
+	lightRadius = modelRadius * 1.5f;*/	
 
 	while (!glfwWindowShouldClose(window)) {
 		float timeValue = (float)glfwGetTime();
@@ -200,7 +251,7 @@ int main() {
 		glm::mat4 model = glm::mat4(1.0f);
 
 		model = glm::rotate(model, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-		model = glm::scale(model, glm::vec3(0.05f));
+		model = glm::scale(model, glm::vec3(scaleFactor));
 		model = glm::translate(model, -modelCenter);
 		glm::mat4 mvp = perspectiveProjection * view * model;
 		glm::mat4 modelView = view * model;
@@ -212,18 +263,18 @@ int main() {
 		shaderprog1.setVec3("light.position", lightPosView);
 		shaderprog1.setVec3("light.color", lightColor);
 
-		shaderprog1.setVec3("material.ambient", Ka);
+		/*shaderprog1.setVec3("material.ambient", Ka);
 		shaderprog1.setVec3("material.diffuse", Kd);
-		shaderprog1.setVec3("material.specular", Ks);
+		shaderprog1.setVec3("material.specular", Ks);*/
 		shaderprog1.setFloat("material.ambientIntensity", ambientIntensity);
 		shaderprog1.setFloat("material.specularIntensity", specularIntensity);
-		shaderprog1.setFloat("material.glossiness", glossiness);
+		//shaderprog1.setFloat("material.glossiness", glossiness);
 		shaderprog1.setVec3("viewPos", cameraPosView);
 
 		shaderprog1.setMat4("mvp", mvp);
 		shaderprog1.setMat4("modelView", modelView);
 		
-		teapotModel.Draw(shaderprog1);
+		mainModel.Draw(shaderprog1);
 
 		shaderprog2.use();
 		glm::mat4 lightModel = glm::mat4(1.0f);

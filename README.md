@@ -41,3 +41,10 @@ Blinn shading done in view space with movable light source.
 <img alt="rimlight.gif" src="https://github.com/abhishekingit/CaveXRT/blob/main/results/rimlight.gif?raw=true" data-hpc="true" class="Box-sc-g0xbh4-0 kzRgrI" height="512px">
 
 Rim lighting added on top of Blinn shading
+
+
+### Textures and Multiple materials
+
+<img alt="yodaMultipleMaterials" src="https://github.com/abhishekingit/CaveXRT/blob/main/results/yodaMultipleMt.gif?raw=true" data-hpc="true" class="Box-sc-g0xbh4-0 kzRgrI" height="512px">
+
+Yoda model with multiple materials and textures. Currently diffuse, specular and normals map can be loaded but the shader does not support normal mapping yet.

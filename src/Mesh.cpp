@@ -5,12 +5,49 @@
 #include <iostream>
 
 
-Mesh::Mesh(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices): meshVertices(vertices), meshIndices(indices) {
+Mesh::Mesh(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices, const std::vector<Texture>& textures, const Material& material): meshVertices(vertices), meshIndices(indices), meshTextures(textures), mtl(material) {
 	ComputeBoundingBox(vertices);
 	setupMesh();
 }
 
 void Mesh::Draw(Shader& shader) const {
+	int texUnit = 0;
+	if (mtl.map_Ka.id != 0) {
+		glActiveTexture(GL_TEXTURE0 + texUnit);
+		glBindTexture(GL_TEXTURE_2D, mtl.map_Ka.id);
+		shader.setInt("material.map_Ka", texUnit);
+		texUnit++;
+	}
+
+	if (mtl.map_Kd.id != 0) {
+		glActiveTexture(GL_TEXTURE0 + texUnit);
+		glBindTexture(GL_TEXTURE_2D, mtl.map_Kd.id);
+		shader.setInt("material.map_Kd", texUnit);
+		texUnit++;
+	}
+
+	if (mtl.map_Ks.id != 0) {
+		glActiveTexture(GL_TEXTURE0 + texUnit);
+		glBindTexture(GL_TEXTURE_2D, mtl.map_Ks.id);
+		shader.setInt("material.map_Ks", texUnit);
+		texUnit++;
+	}
+
+	if (mtl.map_bump.id != 0) {
+		glActiveTexture(GL_TEXTURE0 + texUnit);
+		glBindTexture(GL_TEXTURE_2D, mtl.map_bump.id);
+		shader.setInt("material.map_bump", texUnit);
+		texUnit++;
+	}
+
+	shader.setVec3("material.ambient", mtl.Ka);
+	shader.setVec3("material.diffuse", mtl.Kd);
+	shader.setVec3("material.specular", mtl.Ks);
+	shader.setFloat("material.glossiness", mtl.Ns);
+	shader.setBool("material.hasDiffuseMap", mtl.map_Kd.id != 0);
+	shader.setBool("material.hasSpecularMap", mtl.map_Ks.id != 0);
+	shader.setBool("material.hasBumpMap", mtl.map_bump.id != 0);
+
 	
 	glBindVertexArray(VAO);
 	glDrawElements(GL_TRIANGLES, meshIndices.size(), GL_UNSIGNED_INT, 0);
@@ -43,6 +80,10 @@ void Mesh::setupMesh() {
 	//normals
 	glEnableVertexAttribArray(1);
 	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)(offsetof(Vertex, normals)));
+
+	//texture coords
+	glEnableVertexAttribArray(2);
+	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)(offsetof(Vertex, texCoords)));
 
 	glBindVertexArray(0);
 
