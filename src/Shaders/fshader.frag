@@ -44,7 +44,7 @@ void main() {
 
 	vec3 baseColor = material.hasDiffuseMap ? texture(material.map_Kd, TexCoords).rgb : material.diffuse;
 
-	vec3 ambient = baseColor * material.ambientIntensity * light.color;
+	vec3 ambient = baseColor * material.ambientIntensity;
 	vec3 diffuse = baseColor * cosTheta * light.color;
 
 	vec3 specMask = material.hasSpecularMap ? texture(material.map_Ks, TexCoords).rgb : material.specular; 

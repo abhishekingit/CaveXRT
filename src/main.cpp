@@ -6,6 +6,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include "Shader.h"
 #include "ModelLoader.h"
+#include "CaveXRTConfig.h"
 
 float yaw = 0.0f;
 float pitch = 0.0f;
@@ -31,6 +32,12 @@ float ambientIntensity = 0.2;
 float specularIntensity = 1.0;
 float glossiness = 128;
 
+struct RenderState {
+	Shader* mainShader{};
+	Shader* lightShader{};
+	CaveXRTConfig* config{};
+};
+
 struct AppConfig {
 	int width = 800;
 	int height = 600;
@@ -38,13 +45,13 @@ struct AppConfig {
 };
 
 void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+	auto* state = static_cast<RenderState*>(glfwGetWindowUserPointer(window));
 	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
 		glfwSetWindowShouldClose(window, true);
 	if (key == GLFW_KEY_F6 && action == GLFW_PRESS) {
 		//recompile shaders
-		Shader* shader = static_cast<Shader*>(glfwGetWindowUserPointer(window));
-		if (shader) {
-			shader->reloadShaders();
+		if (state) {
+			state->mainShader->reloadShaders();
 		}
 		else {
 			std::cout << "Shader cast error in Key Callback" << std::endl;
@@ -56,6 +63,17 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
 	}
 	if (key == GLFW_KEY_LEFT_CONTROL && action == GLFW_RELEASE) {
 		lightMode = false;
+	}
+	if (key == GLFW_KEY_R && action == GLFW_PRESS) {
+		if (state) {
+			//shader->reloadShaders();
+			*state->config = loadConfig("../../../CaveXRTConfig.json");
+			state->config->apply(*state->mainShader, *state->lightShader);
+		}
+		else {
+			std::cout << "Shader cast error in Key Callback" << std::endl;
+		}
+
 	}
 
 }
@@ -153,6 +171,8 @@ bool parseArguments(int argc, char* argv[], AppConfig& config) {
 
 
 int main(int argc, char* argv[]) {
+	
+
 	glfwInit();
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
@@ -185,8 +205,16 @@ int main(int argc, char* argv[]) {
 
 	Shader shaderprog1("../../../src/Shaders/vshader.vert", "../../../src/Shaders/fshader.frag");
 	Shader shaderprog2("../../../src/Shaders/cubevshader.vert", "../../../src/Shaders/cubefshader.frag");
+	CaveXRTConfig caveXRTConfig = loadConfig("../../../CaveXRTConfig.json");
 
-	glfwSetWindowUserPointer(window, &shaderprog1);
+	RenderState state{
+		.mainShader = &shaderprog1,
+		.lightShader = &shaderprog2,
+		.config = &caveXRTConfig
+	};
+
+
+	glfwSetWindowUserPointer(window, &state);
 
 	glfwSetKeyCallback(window, keyCallback);
 
@@ -232,7 +260,8 @@ int main(int argc, char* argv[]) {
 		float b = sinf(timeValue * 1.5f + 4.0f) * 0.5f + 0.5f;
 
 		glClearColor(r, g, b, 1.0f);*/
-
+		glm::vec3 backgroundColor = caveXRTConfig.backgroundColor;
+		glClearColor(backgroundColor.x, backgroundColor.y, backgroundColor.z, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		glm::vec3 cameraPos;
@@ -258,6 +287,8 @@ int main(int argc, char* argv[]) {
 
 		glm::vec3 lightPosView = glm::vec3(view * glm::vec4(lightPosWorld, 1.0f));
 		glm::vec3 cameraPosView = glm::vec3(view * glm::vec4(cameraPos, 1.0f));
+
+		glm::vec3 lightColor = caveXRTConfig.lightColor;
 
 		shaderprog1.use();
 		shaderprog1.setVec3("light.position", lightPosView);

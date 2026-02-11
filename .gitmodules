@@ -10,3 +10,6 @@
 [submodule "GL/lodepng"]
 	path = GL/lodepng
 	url = https://github.com/lvandeve/lodepng.git
+[submodule "GL/json"]
+	path = GL/json
+	url = https://github.com/nlohmann/json.git

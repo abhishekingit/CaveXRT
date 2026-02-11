@@ -23,6 +23,10 @@ Submodules in `GL/` and built via `add_subdirectory`:
 - `src/` - source code
 - `src/Shaders/` - GLSL shader files
 - `assets/models/` - Model files
+- `CaveXRTConfig.json` - render configurations (camera, lights)
+
+
+`CaveXRTConfig.json` allows Hot reloading of shaders and dynamic updates to camera and light settings without recompiling the application. Use the `R` key to reload the render settings at runtime.
 
 
 ### Mesh processing and Model loading 

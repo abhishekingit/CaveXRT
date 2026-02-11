@@ -10,6 +10,7 @@ add_subdirectory(GL/glfw)
 add_subdirectory(GL/glad)
 add_subdirectory(GL/glm)
 add_subdirectory(GL/assimp)
+add_subdirectory(GL/json)
 
 add_executable(CaveXRT 
 src/main.cpp
@@ -19,6 +20,8 @@ src/Mesh.h
 src/Mesh.cpp
 src/ModelLoader.h
 src/ModelLoader.cpp
+src/CaveXRTConfig.h
+src/CaveXRTConfig.cpp
 GL/lodepng/lodepng.cpp)
 
 target_link_libraries(CaveXRT glfw glad glm assimp)
@@ -30,4 +33,5 @@ target_include_directories(
     GL/glm
     GL/assimp/include
     GL/lodepng
+    GL/json/include
 )
