@@ -8,13 +8,15 @@
 #include "ModelLoader.h"
 #include "CaveXRTConfig.h"
 
-float yaw = 0.0f;
-float pitch = 0.0f;
-float distance = 5.0f;
+CaveXRTConfig caveXRTConfig = loadConfig("../../../CaveXRTConfig.json");
 
-float lightYaw = 0.0f;
-float lightPitch = 0.3f;
-float lightRadius = 2.0f;
+float yaw = caveXRTConfig.yaw;
+float pitch = caveXRTConfig.pitch;
+float distance = caveXRTConfig.distance;
+
+float lightYaw = caveXRTConfig.lightYaw;
+float lightPitch = caveXRTConfig.lightPitch;
+float lightRadius = caveXRTConfig.lightRadius;
 
 double lastX = 0.0f, lastY = 0.0f;
 bool leftMousePressed = false;
@@ -98,8 +100,8 @@ void cursorPosCallback(GLFWwindow* window, double xpos, double ypos) {
 	lastX = xpos;
 	lastY = ypos;
 
-	const float rotationSpeed = 0.005f;
-	const float zoomSpeed = 0.01f;
+	const float rotationSpeed = caveXRTConfig.rotationSpeed;
+	const float zoomSpeed = caveXRTConfig.zoomSpeed;
 
 	if (leftMousePressed) {
 		if (lightMode) {
@@ -205,7 +207,7 @@ int main(int argc, char* argv[]) {
 
 	Shader shaderprog1("../../../src/Shaders/vshader.vert", "../../../src/Shaders/fshader.frag");
 	Shader shaderprog2("../../../src/Shaders/cubevshader.vert", "../../../src/Shaders/cubefshader.frag");
-	CaveXRTConfig caveXRTConfig = loadConfig("../../../CaveXRTConfig.json");
+	
 
 	RenderState state{
 		.mainShader = &shaderprog1,
@@ -273,8 +275,8 @@ int main(int argc, char* argv[]) {
 		lightPosWorld.x = lightRadius * cos(lightPitch) * sin(lightYaw);
 		lightPosWorld.y = lightRadius * sin(lightPitch);
 		lightPosWorld.z = lightRadius * cos(lightPitch) * cos(lightYaw);
-		
-		glm::mat4 view = glm::lookAt(cameraPos, glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
+		glm::mat4 view = glm::lookAt(cameraPos, caveXRTConfig.cameraTarget, caveXRTConfig.cameraUp);
 
 		glm::mat4 perspectiveProjection = glm::perspective(glm::radians(45.0f), 800.0f / 600.0f, 0.1f, 100.0f);
 		glm::mat4 model = glm::mat4(1.0f);
@@ -297,8 +299,8 @@ int main(int argc, char* argv[]) {
 		/*shaderprog1.setVec3("material.ambient", Ka);
 		shaderprog1.setVec3("material.diffuse", Kd);
 		shaderprog1.setVec3("material.specular", Ks);*/
-		shaderprog1.setFloat("material.ambientIntensity", ambientIntensity);
-		shaderprog1.setFloat("material.specularIntensity", specularIntensity);
+		shaderprog1.setFloat("material.ambientIntensity", caveXRTConfig.ambientIntensity);
+		shaderprog1.setFloat("material.specularIntensity", caveXRTConfig.specularIntensity);
 		//shaderprog1.setFloat("material.glossiness", glossiness);
 		shaderprog1.setVec3("viewPos", cameraPosView);
 
