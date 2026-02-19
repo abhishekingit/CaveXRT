@@ -22,7 +22,9 @@ src/ModelLoader.h
 src/ModelLoader.cpp
 src/CaveXRTConfig.h
 src/CaveXRTConfig.cpp
-GL/lodepng/lodepng.cpp)
+GL/lodepng/lodepng.cpp 
+src/RenderTarget.h
+src/RenderTarget.cpp)
 
 target_link_libraries(CaveXRT glfw glad glm assimp)
 

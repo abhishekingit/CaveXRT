@@ -52,3 +52,10 @@ Rim lighting added on top of Blinn shading
 <img alt="yodaMultipleMaterials" src="https://github.com/abhishekingit/CaveXRT/blob/main/results/yodaMultipleMt.gif?raw=true" data-hpc="true" class="Box-sc-g0xbh4-0 kzRgrI" height="512px">
 
 Yoda model with multiple materials and textures. Currently diffuse, specular and normals map can be loaded but the shader does not support normal mapping yet.
+
+
+### Render To Texture 
+
+<img alt="yodaRenderTexture" src="https://github.com/abhishekingit/CaveXRT/blob/main/results/yodaRenderTexture.gif?raw=true" data-hpc="true" class="Box-sc-g0xbh4-0 kzRgrI" height="512px">
+
+Yoda model rendered as a texture on a quad plane. Using the custom RenderTarget class to create framebuffer objects and attach textures using depth buffer.

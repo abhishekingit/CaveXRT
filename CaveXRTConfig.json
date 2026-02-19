@@ -1,8 +1,8 @@
 {
   "backgroundColor": [ 0.8, 0.8, 0.8 ],
-  "lightColor": [ 0.9, 0.2, 0.2 ],
+  "lightColor": [ 1.0, 1.0, 1.0 ],
   "yaw": 0.0,
-  "pitch": 0.0,
+  "pitch": 6.0,
   "distance": 5.0,
   "lightYaw": 0.0,
   "lightPitch": 0.3,
