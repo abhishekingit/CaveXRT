@@ -59,3 +59,11 @@ Yoda model with multiple materials and textures. Currently diffuse, specular and
 <img alt="yodaRenderTexture" src="https://github.com/abhishekingit/CaveXRT/blob/main/results/yodaRenderTexture.gif?raw=true" data-hpc="true" class="Box-sc-g0xbh4-0 kzRgrI" height="512px">
 
 Yoda model rendered as a texture on a quad plane. Using the custom RenderTarget class to create framebuffer objects and attach textures using depth buffer.
+
+
+### Reflections and Environment mapping
+
+<img alt="yodaReflection" src="https://github.com/abhishekingit/CaveXRT/blob/main/results/yodaRender.gif?raw=true" data-hpc="true" class="Box-sc-g0xbh4-0 kzRgrI" height="720px">
+
+Reflections with environment mapping using cubemaps. The fragment shader samples the cubemap texture based on the reflection vector calculated from the view direction and surface normal. These reflections are still incorrect which you can notice on the spout and lid, and also the bottom of the teapot has some grazing reflections happening. 
+Theres support for skybox added using cubemaps.

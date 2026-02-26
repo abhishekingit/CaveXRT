@@ -18,7 +18,9 @@ public:
 	void setFloat(const char* uniformName, float value) const;
 	void setVec3(const char* uniformName, const glm::vec3& vec) const;
 	void setVec3(const char* uniformName, float x, float y, float z) const;
+	void setVec4(const char* uniformName, const glm::vec4& vec) const;
 	void setMat4(const char* uniformName, const glm::mat4& mat) const;
+	void setMat3(const char* uniformName, const glm::mat3& mat) const;
 
 private:
 	uint32_t ShaderID;

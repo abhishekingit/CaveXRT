@@ -1,4 +1,16 @@
 {
+  "skyboxEnabled": true,
+  "skyboxRootDirectory": "../../../assets/skybox/sceneCubemap",
+  "skyboxFaces": [
+    "cubemap_posx.png",
+    "cubemap_negx.png",
+    "cubemap_posy.png",
+    "cubemap_negy.png",
+    "cubemap_posz.png",
+    "cubemap_negz.png"
+  ],
+  "skyboxExposure": 1.0,
+
   "backgroundColor": [ 0.8, 0.8, 0.8 ],
   "lightColor": [ 1.0, 1.0, 1.0 ],
   "yaw": 0.0,
@@ -16,9 +28,9 @@
   "Ks": [ 1.0, 1.0, 1.0 ],
   "ambientIntensity": 0.35,
   "specularIntensity": 1.0,
-  "glossiness": 128,
+  "glossiness": 256,
 
-  "width": 800,
-  "height":  600
+  "width": 1280,
+  "height": 720
 
 }

@@ -32,6 +32,16 @@ CaveXRTConfig loadConfig(const std::string& jsonFilePath) {
 		}
 		jsonConfig = nlohmann::json::parse(configFile);
 
+		caveXRTConfig.skyboxConfig.enabled = jsonConfig.value("skyboxEnabled", caveXRTConfig.skyboxConfig.enabled);
+		caveXRTConfig.skyboxConfig.root = jsonConfig.value("skyboxRootDirectory", caveXRTConfig.skyboxConfig.root);
+
+		if (jsonConfig.contains("skyboxFaces")) {
+			for (size_t i = 0; i < caveXRTConfig.skyboxConfig.faces.size(); i++) {
+				caveXRTConfig.skyboxConfig.faces[i] = jsonConfig["skyboxFaces"][i].get<std::string>();
+			}
+		}
+		caveXRTConfig.skyboxConfig.exposure = jsonConfig.value("skyboxExposure", caveXRTConfig.skyboxConfig.exposure);
+
 		caveXRTConfig.backgroundColor = convVector(jsonConfig, "backgroundColor", caveXRTConfig.backgroundColor);
 		caveXRTConfig.lightColor = convVector(jsonConfig, "lightColor", caveXRTConfig.lightColor);
 		

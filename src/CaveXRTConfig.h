@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Shader.h"
+#include "Skybox.h"
 #include <nlohmann/json.hpp>
 #include <glm/glm.hpp>
 #include <glm/vec3.hpp>
@@ -8,6 +9,8 @@
 #include <string>
 
 struct CaveXRTConfig {
+	SkyboxConfig skyboxConfig;
+
 	glm::vec3 backgroundColor = glm::vec3(0.1f, 0.1f, 0.1f);
 	glm::vec3 lightColor = glm::vec3(1.0f, 1.0f, 1.0f);
 	

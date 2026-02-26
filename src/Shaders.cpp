@@ -111,3 +111,7 @@ void Shader::setVec3(const char* uniformName, float x, float y, float z) const {
 void Shader::setMat4(const char* uniformName, const glm::mat4& mat) const {
 	glUniformMatrix4fv(glGetUniformLocation(ShaderID, uniformName), 1, GL_FALSE, &mat[0][0]);
 }
+
+void Shader::setMat3(const char* uniformName, const glm::mat3& mat) const {
+	glUniformMatrix3fv(glGetUniformLocation(ShaderID, uniformName), 1, GL_FALSE, &mat[0][0]);
+}

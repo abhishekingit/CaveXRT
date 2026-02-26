@@ -24,7 +24,8 @@ src/CaveXRTConfig.h
 src/CaveXRTConfig.cpp
 GL/lodepng/lodepng.cpp 
 src/RenderTarget.h
-src/RenderTarget.cpp)
+src/RenderTarget.cpp 
+src/Skybox.h)
 
 target_link_libraries(CaveXRT glfw glad glm assimp)
 

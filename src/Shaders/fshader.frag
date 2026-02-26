@@ -3,6 +3,8 @@
 in vec3 FragPos;
 in vec3 Normal;
 in vec2 TexCoords;
+in vec3 WorldPos;
+in vec3 WorldNormal;
 	
 out vec4 outputColor;
 
@@ -32,6 +34,13 @@ struct Light {
 uniform Material material;
 uniform Light light;
 uniform vec3 viewPos;
+uniform vec3 cameraPosWorld;
+
+uniform bool isReflectionPass;
+uniform mat4 reflectionMatrix;
+
+uniform bool skyboxEnabled;
+uniform samplerCube skybox;
 
 void main() {
 	vec3 norm = normalize(Normal);
@@ -53,8 +62,22 @@ void main() {
 	if(cosTheta > 0.0) {
 		specular =  specularColor * pow(cosAlpha, material.glossiness) * light.color;
 	}
-		
 
-	outputColor = vec4(ambient + diffuse + specular, 1.0);
+	vec3 blinnShading = ambient + diffuse + specular;
+
+	vec3 reflectedColor = vec3(0.0);
+	if(skyboxEnabled) {
+		vec3 worldViewDir = normalize(cameraPosWorld - WorldPos);
+		vec3 worldNormal = normalize(WorldNormal);
+		vec3 reflectDir = reflect(-normalize(worldViewDir), worldNormal);
+		if(isReflectionPass) {
+			reflectDir.y = -reflectDir.y; // Invert Y for reflection pass
+		}
+
+		reflectedColor = texture(skybox, reflectDir).rgb;
+	}
+		
+	vec3 finalColor = mix(blinnShading, reflectedColor, skyboxEnabled ? 0.5 : 0.6);
+	outputColor = vec4(finalColor, 1.0);
 //	outputColor = vec4(fract(TexCoords), 0.0, 1.0);
 }
