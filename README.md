@@ -67,3 +67,9 @@ Yoda model rendered as a texture on a quad plane. Using the custom RenderTarget 
 
 Reflections with environment mapping using cubemaps. The fragment shader samples the cubemap texture based on the reflection vector calculated from the view direction and surface normal. These reflections are still incorrect which you can notice on the spout and lid, and also the bottom of the teapot has some grazing reflections happening. 
 Theres support for skybox added using cubemaps.
+
+### Shadow Mapping
+
+<img alt="shadows" src="https://github.com/abhishekingit/CaveXRT/blob/main/results/shadows.gif?raw=true" data-hpc="true" class="Box-sc-g0xbh4-0 kzRgrI" height="512px">
+
+Shadow mapping implemented using depth maps. The scene is rendered from the light's perspective to create a depth map, which is then used in the main render pass to determine if fragments are in shadow. The shadows are hard-edged and there are some artifacts due to the lack of biasing and filtering, but it demonstrates basic shadow mapping.

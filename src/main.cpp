@@ -12,6 +12,7 @@
 #include "ModelLoader.h"
 #include "CaveXRTConfig.h"
 #include "RenderTarget.h"
+#include "DepthTarget.h"
 
 
 
@@ -71,6 +72,8 @@ float ambientIntensity = 0.2;
 float specularIntensity = 1.0;
 float glossiness = 128;
 
+const uint32_t shadowWidth = 1024, shadowHeight = 1024;
+
 constexpr float quadPlaneVertices[] = {
 	-1.0f, -1.0f, 0.0f, 0.0f, 0.0f,
 	1.0f, -1.0f, 0.0f, 1.0f, 0.0f,
@@ -91,6 +94,7 @@ struct RenderState {
 	Shader* quadShader{};
 	CaveXRTConfig* config{};
 	RenderTarget* renderTarget{};
+	DepthTarget* shadowMap{};
 	int* framebufferWidth{};
 	int* framebufferHeight{};
 };
@@ -309,6 +313,7 @@ int main(int argc, char* argv[]) {
 	Shader shaderprog2("../../../src/Shaders/cubevshader.vert", "../../../src/Shaders/cubefshader.frag");
 	Shader quadShader("../../../src/Shaders/quadVshader.vert", "../../../src/Shaders/quadFshader.frag");
 	Shader skyboxShader("../../../src/Shaders/skyboxvshader.vert", "../../../src/Shaders/skyboxfshader.frag");
+	Shader depthShader("../../../src/Shaders/depthVshader.vert", "../../../src/Shaders/depthFshader.frag");
 
 	int framebufferWidth = caveXRTConfig.width;
 	int framebufferHeight = caveXRTConfig.height;
@@ -316,12 +321,15 @@ int main(int argc, char* argv[]) {
 
 	RenderTarget reflectionRenderTarget(framebufferWidth, framebufferHeight);
 
+	DepthTarget depthTarget(shadowWidth, shadowHeight);
+
 	RenderState state{
 		.mainShader = &shaderprog1,
 		.lightShader = &shaderprog2,
 		.quadShader = &quadShader,
 		.config = &caveXRTConfig,
 		.renderTarget = &renderTarget,
+		.shadowMap = &depthTarget,
 		.framebufferWidth = &framebufferWidth,
 		.framebufferHeight = &framebufferHeight	
 
@@ -371,9 +379,11 @@ int main(int argc, char* argv[]) {
 	//ModelLoader teapotModel("../../../assets/models/yoda/yoda.obj");
 	ModelLoader mainModel(config.modelPath);
 	ModelLoader cubeModel("../../../assets/models/cube.obj");
+	ModelLoader lampModel("../../../assets/models/light/light.obj");
 
 	uint32_t cubemapTexture = loadCubemap(caveXRTConfig.skyboxConfig);
 	const int teapotEnvMapUnit = 5;
+	const int shadowMapUnit = 8;
 
 	//Computing Model bounding box and center
 	glm::vec3 modelBoxMin(FLT_MAX);
@@ -419,7 +429,7 @@ int main(int argc, char* argv[]) {
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 		auto orbitToPosition = [](const OrbitCamera& cam) {
-			float compYaw = cam.yaw + autoYaw;
+			float compYaw = cam.yaw;
 			return glm::vec3{
 				cam.radius * cosf(cam.pitch) * sinf(compYaw),
 				cam.radius * sinf(cam.pitch),
@@ -467,71 +477,104 @@ int main(int argc, char* argv[]) {
 		glClearColor(backgroundColor.x, backgroundColor.y, backgroundColor.z, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);*/
 
-		reflectionRenderTarget.Bind();
-		glViewport(0, 0, reflectionRenderTarget.Width(), reflectionRenderTarget.Height());
-		glClearColor(backgroundColor.x, backgroundColor.y, backgroundColor.z, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		//reflectionRenderTarget.Bind();
+		//glViewport(0, 0, reflectionRenderTarget.Width(), reflectionRenderTarget.Height());
+		//glClearColor(backgroundColor.x, backgroundColor.y, backgroundColor.z, 1.0f);
+		//glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-		
+		//
 
-		//glm::vec4 clipPlaneWorld(0.0f, 1.0f, 0.0f, -planeY);
+		////glm::vec4 clipPlaneWorld(0.0f, 1.0f, 0.0f, -planeY);
 
-		/*glm::vec3 reflCameraPos = cameraPos;
-		reflCameraPos.y = planeY - (cameraPos.y - planeY);
+		///*glm::vec3 reflCameraPos = cameraPos;
+		//reflCameraPos.y = planeY - (cameraPos.y - planeY);
 
-		glm::vec3 reflTarget = caveXRTConfig.cameraTarget;
-		reflTarget.y = planeY - (reflTarget.y - planeY);
+		//glm::vec3 reflTarget = caveXRTConfig.cameraTarget;
+		//reflTarget.y = planeY - (reflTarget.y - planeY);
 
-		glm::vec3 reflUp = caveXRTConfig.cameraUp;
-		reflUp.y = -caveXRTConfig.y;*/
+		//glm::vec3 reflUp = caveXRTConfig.cameraUp;
+		//reflUp.y = -caveXRTConfig.y;*/
 	
 
-		//glm::vec3 camUp = caveXRTConfig.cameraUp;
-		//glm::vec3 reflUp;
-		//{ // reflect up as a direction (w=0)
-		//	glm::vec4 up4 = reflectionMatrix * glm::vec4(camUp, 0.0f);
-		//	reflUp = glm::normalize(glm::vec3(up4));
-		//}
+		////glm::vec3 camUp = caveXRTConfig.cameraUp;
+		////glm::vec3 reflUp;
+		////{ // reflect up as a direction (w=0)
+		////	glm::vec4 up4 = reflectionMatrix * glm::vec4(camUp, 0.0f);
+		////	reflUp = glm::normalize(glm::vec3(up4));
+		////}
 
-		//glm::mat4 reflView = glm::lookAt(reflCameraPos, reflTarget, reflUp);
-		glm::mat4 reflView = view;
-		glm::mat4 reflModel = reflectionMatrix * model;
+		////glm::mat4 reflView = glm::lookAt(reflCameraPos, reflTarget, reflUp);
+		//glm::mat4 reflView = view;
+		//glm::mat4 reflModel = reflectionMatrix * model;
 
-		glm::vec3 reflCameraPos = reflectPoint(reflectionMatrix, cameraPos);
-		glm::vec3 reflViewPos = reflectPoint(reflectionMatrix, cameraPosView);
+		//glm::vec3 reflCameraPos = reflectPoint(reflectionMatrix, cameraPos);
+		//glm::vec3 reflViewPos = reflectPoint(reflectionMatrix, cameraPosView);
+		//
+
+		////std::cout << "Refl model matrix " << glm::to_string(reflModel) << std::endl;
+
+		//glm::mat4 reflMVP = perspectiveProjection * reflView * reflModel;
+		//glm::mat4 reflModelView = reflView * reflModel;
+		////glm::vec3 reflViewPos = glm::vec3(cameraPosView.x, -cameraPosView.y, cameraPosView.z);
+
+		//shaderprog1.use();
+		///*shaderprog1.setVec4("clipPlane", clipPlaneWorld);
+		//shaderprog1.setBool("useClipPlane", true);*/
+
+		//shaderprog1.setVec3("light.position", glm::vec3(reflectionMatrix * view * glm::vec4(lightPosWorld, 1.0f)));
+		//shaderprog1.setVec3("light.color", lightColor);
+		//shaderprog1.setFloat("material.ambientIntensity", caveXRTConfig.ambientIntensity);
+		//shaderprog1.setFloat("material.specularIntensity", caveXRTConfig.specularIntensity);
+		//shaderprog1.setVec3("viewPos", cameraPosView);
+		//shaderprog1.setVec3("cameraPosWorld", reflCameraPos);
+		//shaderprog1.setBool("isReflectionPass", true);
+		//shaderprog1.setMat4("reflectionMatrix", reflectionMatrix);
+		////shaderprog1.setBool("skyboxEnabled", false);
+		//shaderprog1.setMat4("mvp", reflMVP);
+		//shaderprog1.setMat4("modelView", reflModelView);
+		//shaderprog1.setMat4("model", reflModel);
+
+
+		//mainModel.Draw(shaderprog1);
+
+		//reflectionRenderTarget.UnBind();
+
+		depthTarget.Bind();
+		glViewport(0, 0, shadowWidth, shadowHeight);
+		glClear(GL_DEPTH_BUFFER_BIT);
+
+		float lightNearPlane = 0.1f;
+		float lightFarPlane = 6.5f;
+		float lightOrtho = maxExtent * scaleFactor * 2.0f;
+
+		glm::mat4 lightProjection = glm::ortho(-lightOrtho, lightOrtho, -lightOrtho, lightOrtho, lightNearPlane, lightFarPlane);
+		glm::mat4 lightView = glm::lookAt(lightPosWorld, caveXRTConfig.cameraTarget, glm::vec3(0.0f, 1.0f, 0.0f));
+		glm::mat4 lightSpaceMatrix = lightProjection * lightView;
+
+		depthShader.use();
+		depthShader.setMat4("lightSpaceMatrix", lightSpaceMatrix);
+
+		//teapotModel
+		depthShader.setMat4("model", model);
+		mainModel.Draw(depthShader);
 		
+		//planeModel;
+		/*glm::mat4 planeModelDepth = glm::mat4(1.0f);
+		planeModelDepth = glm::translate(planeModelDepth, glm::vec3(0.0f, planeY, 0.0f));
+		planeModelDepth = glm::rotate(planeModelDepth, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+		planeModelDepth = glm::scale(planeModelDepth, glm::vec3(2.0f));
+		depthShader.setMat4("model", planeModelDepth);
+		glBindVertexArray(quadVAO);
+		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
+		glBindVertexArray(0);*/
 
-		//std::cout << "Refl model matrix " << glm::to_string(reflModel) << std::endl;
-
-		glm::mat4 reflMVP = perspectiveProjection * reflView * reflModel;
-		glm::mat4 reflModelView = reflView * reflModel;
-		//glm::vec3 reflViewPos = glm::vec3(cameraPosView.x, -cameraPosView.y, cameraPosView.z);
-
-		shaderprog1.use();
-		/*shaderprog1.setVec4("clipPlane", clipPlaneWorld);
-		shaderprog1.setBool("useClipPlane", true);*/
-
-		shaderprog1.setVec3("light.position", glm::vec3(reflectionMatrix * view * glm::vec4(lightPosWorld, 1.0f)));
-		shaderprog1.setVec3("light.color", lightColor);
-		shaderprog1.setFloat("material.ambientIntensity", caveXRTConfig.ambientIntensity);
-		shaderprog1.setFloat("material.specularIntensity", caveXRTConfig.specularIntensity);
-		shaderprog1.setVec3("viewPos", cameraPosView);
-		shaderprog1.setVec3("cameraPosWorld", reflCameraPos);
-		shaderprog1.setBool("isReflectionPass", true);
-		shaderprog1.setMat4("reflectionMatrix", reflectionMatrix);
-		//shaderprog1.setBool("skyboxEnabled", false);
-		shaderprog1.setMat4("mvp", reflMVP);
-		shaderprog1.setMat4("modelView", reflModelView);
-		shaderprog1.setMat4("model", reflModel);
-
-
-		mainModel.Draw(shaderprog1);
-
-		reflectionRenderTarget.UnBind();
+		depthTarget.UnBind();
+		glViewport(0, 0, framebufferWidth, framebufferHeight);
 
 		shaderprog1.use();
 		shaderprog1.setVec3("light.position", lightPosView);
 		shaderprog1.setVec3("light.color", lightColor);
+		shaderprog1.setVec3("lightPosWorld", lightPosWorld);
 
 		/*shaderprog1.setVec3("material.ambient", Ka);
 		shaderprog1.setVec3("material.diffuse", Kd);
@@ -544,13 +587,18 @@ int main(int argc, char* argv[]) {
 		shaderprog1.setBool("skyboxEnabled", caveXRTConfig.skyboxConfig.enabled);
 		shaderprog1.setBool("isReflectionPass", false);
 
-		glActiveTexture(GL_TEXTURE0 + teapotEnvMapUnit);
+		/*glActiveTexture(GL_TEXTURE0 + teapotEnvMapUnit);
 		glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
-		shaderprog1.setInt("skybox", teapotEnvMapUnit);
+		shaderprog1.setInt("skybox", teapotEnvMapUnit);*/
+
+		glActiveTexture(GL_TEXTURE0 + shadowMapUnit);
+		glBindTexture(GL_TEXTURE_2D, depthTarget.GetDepthTexture());
+		shaderprog1.setInt("shadowMap", shadowMapUnit);
 
 		shaderprog1.setMat4("mvp", mvp);
 		shaderprog1.setMat4("modelView", modelView);
 		shaderprog1.setMat4("model", model);
+		shaderprog1.setMat4("lightSpaceMatrix", lightSpaceMatrix);
 		shaderprog1.setVec3("cameraPosWorld", cameraPos);
 		
 		mainModel.Draw(shaderprog1);
@@ -571,24 +619,39 @@ int main(int argc, char* argv[]) {
 		glm::mat4 planeView = glm::lookAt(planeCameraPos, caveXRTConfig.cameraTarget, caveXRTConfig.cameraUp);
 
 		glm::mat4 planeMVP = perspectiveProjection * view * planeModel;
-		glm::mat4 reflectionVP = perspectiveProjection * reflView;
 		quadShader.setMat4("mvp", planeMVP);
 		quadShader.setMat4("model", planeModel);
 		quadShader.setMat4("view", view);
+		quadShader.setMat4("lightSpaceMatrix", lightSpaceMatrix);
 		quadShader.setVec3("cameraPosWorld", cameraPos);
+		quadShader.setVec3("lightPos", lightPosWorld);
 		quadShader.setBool("skyboxEnabled", caveXRTConfig.skyboxConfig.enabled);
-		quadShader.setMat4("reflectionVP", reflectionVP);
+		quadShader.setBool("showReflections", false);
+		quadShader.setBool("showDepthMap", false);
 		quadShader.setFloat("width", reflectionRenderTarget.Width());
 		quadShader.setFloat("height", reflectionRenderTarget.Height());
 
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, reflectionRenderTarget.GetColorTexture());
-		quadShader.setInt("renderTexture", 0);
+		quadShader.setVec3("ambient", glm::vec3(0.3f, 0.3f, 0.3f));
+		quadShader.setVec3("diffuse", glm::vec3(0.4f, 0.4f, 0.4f));
+		quadShader.setVec3("specular", glm::vec3(0.2f, 0.2f, 0.2f));
 
-		glActiveTexture(GL_TEXTURE1);
-		glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
-		/*glGenerateMipmap(GL_TEXTURE_2D);*/
-		quadShader.setInt("cubemaptexture", 1);
+		quadShader.setFloat("ambientIntensity", 0.35);
+		quadShader.setFloat("specularIntensity", 1.0);
+		quadShader.setFloat("glossiness", 32);
+
+		//glActiveTexture(GL_TEXTURE0);
+		//glBindTexture(GL_TEXTURE_2D, reflectionRenderTarget.GetColorTexture());
+		//quadShader.setInt("renderTexture", 0);
+		//		
+		//glActiveTexture(GL_TEXTURE1);
+		//glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
+		///*glGenerateMipmap(GL_TEXTURE_2D);*/
+		//quadShader.setInt("cubemaptexture", 1);
+
+		glActiveTexture(GL_TEXTURE2);
+		glBindTexture(GL_TEXTURE_2D, depthTarget.GetDepthTexture());
+		quadShader.setInt("depthMap", 2);
+
 
 		glBindVertexArray(quadVAO);
 		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
@@ -596,28 +659,49 @@ int main(int argc, char* argv[]) {
 	
 		glDepthMask(GL_FALSE);
 		glDepthFunc(GL_LEQUAL);
-		skyboxShader.use();
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
-		glm::mat4 skyboxView = glm::mat4(glm::mat3(view));
-		skyboxShader.setMat4("projection", perspectiveProjection);
-		skyboxShader.setMat4("view", skyboxView);
-		skyboxShader.setInt("skybox", 0);
 
-		cubeModel.Draw(skyboxShader);
+		if (caveXRTConfig.skyboxConfig.enabled) {
+			skyboxShader.use();
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
+			glm::mat4 skyboxView = glm::mat4(glm::mat3(view));
+			skyboxShader.setMat4("projection", perspectiveProjection);
+			skyboxShader.setMat4("view", skyboxView);
+			skyboxShader.setInt("skybox", 0);
+
+			cubeModel.Draw(skyboxShader);
+		}
+	
 		glDepthFunc(GL_LESS);
 		glDepthMask(GL_TRUE);
+		/*if (caveXRTConfig.skyboxConfig.enabled) {
+			
+		}*/
+		
 
-		/*shaderprog2.use();
+		shaderprog2.use();
+
+		glm::vec3 lampTarget = caveXRTConfig.cameraTarget;
+		glm::vec3 lampForward = glm::normalize(lampTarget - lightPosWorld);
+		glm::vec3 lampRight = glm::normalize(glm::cross(glm::vec3(0.0f, 1.0f, 0.0f), lampForward));
+		glm::vec3 lampUp = glm::cross(lampForward, lampRight);
+
 		glm::mat4 lightModel = glm::mat4(1.0f);
 		lightModel = glm::translate(lightModel, lightPosWorld);
-		lightModel = glm::scale(lightModel, glm::vec3(0.02f));
+
+		glm::mat4 lightRotation(1.0f);
+		lightRotation[0] = glm::vec4(lampRight, 0.0f);
+		lightRotation[1] = glm::vec4(lampUp, 0.0f);
+		lightRotation[2] = glm::vec4(-lampForward, 0.0f);
+
+		lightModel = lightModel * lightRotation;
+		lightModel = lightModel * glm::scale(glm::mat4(1.0f), glm::vec3(0.1f));
 
 		glm::mat4 lightMVP = perspectiveProjection * view * lightModel;
 		shaderprog2.setMat4("mvp", lightMVP);
 		shaderprog2.setVec3("lightColor", lightColor);
 
-		cubeModel.Draw(shaderprog2);*/
+ 		lampModel.Draw(shaderprog2);
 
 		glfwSwapBuffers(window);
 
