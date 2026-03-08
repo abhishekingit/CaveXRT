@@ -4,6 +4,9 @@
 
 ### Simple Particle system using Compute Shaders
 
+https://github.com/user-attachments/assets/edb9c679-09b3-4ae1-a8b5-c431c7f1fe30
+
+
 
 Simple particle system using compute shaders. Particles are initialized with random positions and velocities and updated each frame based on delta time. Here the particles are rendered as points with a basic shader that colors them. 
 Here the Particle system doesn't support collisions/hitboxes yet which is why it passes through the quad. 
