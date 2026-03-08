@@ -1,5 +1,13 @@
 ## CaveXRT
 
+## GPU Fluid Simulation using Compute Shaders 
+
+### Simple Particle system using Compute Shaders
+
+
+Simple particle system using compute shaders. Particles are initialized with random positions and velocities and updated each frame based on delta time. Here the particles are rendered as points with a basic shader that colors them. 
+Here the Particle system doesn't support collisions/hitboxes yet which is why it passes through the quad. 
+
 ### Requirements
 - CMake >= 3.20
 - C++20 compiler (MSVC/Clang/GCC)
@@ -27,43 +35,3 @@ Submodules in `GL/` and built via `add_subdirectory`:
 
 
 `CaveXRTConfig.json` allows Hot reloading of shaders and dynamic updates to camera and light settings without recompiling the application. Use the `R` key to reload the render settings at runtime.
-
-
-### Mesh processing and Model loading 
-
-<img alt="UtahTeapot.gif" src="https://github.com/abhishekingit/CaveXRT/blob/main/results/modelload.gif?raw=true" data-hpc="true" class="Box-sc-g0xbh4-0 kzRgrI" height="512px">
-
-A simple teapot model, Shaders can be recompiled using F6 key. 
-
-
-### Blinn Shading and lighting 
-
-<img alt="blinnshade.gif" src="https://github.com/abhishekingit/CaveXRT/blob/main/results/blinnshade.gif?raw=true" data-hpc="true" class="Box-sc-g0xbh4-0 kzRgrI" height="512px">
-
-Blinn shading done in view space with movable light source.
-
-<img alt="rimlight.gif" src="https://github.com/abhishekingit/CaveXRT/blob/main/results/rimlight.gif?raw=true" data-hpc="true" class="Box-sc-g0xbh4-0 kzRgrI" height="512px">
-
-Rim lighting added on top of Blinn shading
-
-
-### Textures and Multiple materials
-
-<img alt="yodaMultipleMaterials" src="https://github.com/abhishekingit/CaveXRT/blob/main/results/yodaMultipleMt.gif?raw=true" data-hpc="true" class="Box-sc-g0xbh4-0 kzRgrI" height="512px">
-
-Yoda model with multiple materials and textures. Currently diffuse, specular and normals map can be loaded but the shader does not support normal mapping yet.
-
-
-### Render To Texture 
-
-<img alt="yodaRenderTexture" src="https://github.com/abhishekingit/CaveXRT/blob/main/results/yodaRenderTexture.gif?raw=true" data-hpc="true" class="Box-sc-g0xbh4-0 kzRgrI" height="512px">
-
-Yoda model rendered as a texture on a quad plane. Using the custom RenderTarget class to create framebuffer objects and attach textures using depth buffer.
-
-
-### Reflections and Environment mapping
-
-<img alt="yodaReflection" src="https://github.com/abhishekingit/CaveXRT/blob/main/results/yodaRender.gif?raw=true" data-hpc="true" class="Box-sc-g0xbh4-0 kzRgrI" height="720px">
-
-Reflections with environment mapping using cubemaps. The fragment shader samples the cubemap texture based on the reflection vector calculated from the view direction and surface normal. These reflections are still incorrect which you can notice on the spout and lid, and also the bottom of the teapot has some grazing reflections happening. 
-Theres support for skybox added using cubemaps.

@@ -25,7 +25,8 @@ void main() {
 		vec3 reflectDir = reflect(-viewDir, normalize(WorldNormal));
 		envColor = texture(cubemaptexture, reflectDir).rgb;
 	}
+	vec3 finalColor = vec3(0.4, 0.4, 0.4);
 
-	vec3 finalColor = mix(reflectionColor, envColor, 0.5);
+	//vec3 finalColor = mix(reflectionColor, envColor, 0.5);
 	outputColor = vec4(finalColor, 1.0);
 }

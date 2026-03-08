@@ -10,6 +10,7 @@
 class Shader {
 public:
 	Shader(const char* vertexShaderPath, const char* fragmentShaderPath);
+	~Shader() = default;
 	void use() const;
 	void reloadShaders();
 

@@ -1,5 +1,5 @@
 {
-  "skyboxEnabled": true,
+  "skyboxEnabled": false,
   "skyboxRootDirectory": "../../../assets/skybox/sceneCubemap",
   "skyboxFaces": [
     "cubemap_posx.png",
