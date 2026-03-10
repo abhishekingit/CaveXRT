@@ -17,8 +17,8 @@ class ParticleSystem {
 public:
 	ParticleSystem(size_t maxParticles, const char* computeShaderPath, const char* vertexShaderPath, const char* fragmentShaderPath);
 	~ParticleSystem();
-	void Update(float deltaTime);
-	void Render(const glm::mat4& mvp, const glm::vec3& particleColor, float pointSize);
+	void Update(float deltaTime, const glm::vec3& bboxMin, const glm::vec3& bboxMax, float pointSize, float wallDamping);
+	void Render(const glm::mat4& mvp, const glm::vec3& particleColor, float pointSize, const glm::vec2& viewportSize, const glm::mat4& projection, const glm::mat4& view, const glm::vec3& lightWorldPos);
 
 private:
 	size_t maxParticles;

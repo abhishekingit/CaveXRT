@@ -100,6 +100,10 @@ void Shader::setFloat(const char* uniformName, float value) const {
 	glUniform1f(glGetUniformLocation(ShaderID, uniformName), value);
 }
 
+void Shader::setVec2(const char* uniformName, const glm::vec2& vec) const {
+	glUniform2fv(glGetUniformLocation(ShaderID, uniformName), 1, &vec[0]);
+}
+
 void Shader::setVec3(const char* uniformName, const glm::vec3& vec) const {
 	glUniform3fv(glGetUniformLocation(ShaderID, uniformName), 1, &vec[0]);
 }

@@ -91,11 +91,15 @@ void ParticleSystem::InitializeParticles() {
 
 }
 
-void ParticleSystem::Update(float deltaTime) {
+void ParticleSystem::Update(float deltaTime, const glm::vec3 &bboxMin, const glm::vec3 &bboxMax, float pointSize, float wallDamping) {
 	if (!computeProgram) return;
 	computeProgram->use();
 	computeProgram->setFloat("deltaTime", deltaTime);
 	computeProgram->setUint("particleCount", maxParticles);
+	computeProgram->setVec3("boxMin", bboxMin);
+	computeProgram->setVec3("boxMax", bboxMax);
+	computeProgram->setFloat("particleRadius", pointSize);
+	computeProgram->setFloat("wallDamping", wallDamping);
 	uint32_t groups = (maxParticles + workGroupSize - 1) / workGroupSize;
 	computeProgram->dispatch(groups, 1, 1);
 	glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
@@ -103,11 +107,15 @@ void ParticleSystem::Update(float deltaTime) {
 }
 
 
-void ParticleSystem::Render(const glm::mat4& mvp, const glm::vec3 &particleColor, float pointSize) {
+void ParticleSystem::Render(const glm::mat4& mvp, const glm::vec3 &particleColor, float pointSize, const glm::vec2 &viewportSize, const glm::mat4& projection, const glm::mat4& view, const glm::vec3 &lightWorldPos) {
 	glBindVertexArray(vao);
 
 	renderShader->use();
 	renderShader->setMat4("mvp", mvp);
+	renderShader->setMat4("projection", projection);
+	renderShader->setMat4("view", view);
+	renderShader->setVec2("viewportSize", viewportSize);
+	renderShader->setVec3("lightPosView", glm::vec3(view * glm::vec4(lightWorldPos, 1.0)));
 	renderShader->setFloat("pointSize", pointSize);
 	renderShader->setVec3("particleColor", particleColor);
 	//need to decide for simple/lean blinn phong shading uniforms

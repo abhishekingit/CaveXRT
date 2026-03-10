@@ -72,6 +72,28 @@ float ambientIntensity = 0.2;
 float specularIntensity = 1.0;
 float glossiness = 128;
 
+glm::vec3 bboxMin(-1.5f, 0.0f, -0.7f);
+glm::vec3 bboxMax(1.5f, 1.8f, 0.7f);
+
+float bboxVerts[] = {
+	bboxMin.x, bboxMin.y, bboxMin.z,
+	bboxMax.x, bboxMin.y, bboxMin.z,
+	bboxMax.x, bboxMax.y, bboxMin.z,
+	bboxMin.x, bboxMax.y, bboxMin.z,
+	bboxMin.x, bboxMin.y, bboxMax.z,
+	bboxMax.x, bboxMin.y, bboxMax.z,
+	bboxMax.x, bboxMax.y, bboxMax.z,
+	bboxMin.x, bboxMax.y, bboxMax.z
+};
+
+uint32_t bboxIndices[] = {
+	0, 1,  1, 2,  2, 3,  3, 0,
+
+	4, 5,  5, 6,  6, 7,  7, 4,
+
+	0, 4,  1, 5,  2, 6,  3, 7
+};
+
 constexpr float quadPlaneVertices[] = {
 	-1.0f, -1.0f, 0.0f, 0.0f, 0.0f,
 	1.0f, -1.0f, 0.0f, 1.0f, 0.0f,
@@ -310,8 +332,9 @@ int main(int argc, char* argv[]) {
 	Shader shaderprog2("../../../src/Shaders/cubevshader.vert", "../../../src/Shaders/cubefshader.frag");
 	Shader quadShader("../../../src/Shaders/quadVshader.vert", "../../../src/Shaders/quadFshader.frag");
 	Shader skyboxShader("../../../src/Shaders/skyboxvshader.vert", "../../../src/Shaders/skyboxfshader.frag");
+	Shader bboxShader("../../../src/Shaders/bboxvshader.vert", "../../../src/Shaders/bboxfshader.frag");
 
-	ParticleSystem particleSystem(65536, "../../../src/Shaders/Particles/particlecshader.comp", "../../../src/Shaders/Particles/particlevshader.vert", "../../../src/Shaders/Particles/particlefshader.frag");
+	ParticleSystem particleSystem(1000, "../../../src/Shaders/Particles/particlecshader.comp", "../../../src/Shaders/Particles/particlevshader.vert", "../../../src/Shaders/Particles/particlefshader.frag");
 
 	
 
@@ -358,6 +381,30 @@ int main(int argc, char* argv[]) {
 	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
 
 	glBindVertexArray(0);
+	
+
+	//for bbox
+	uint32_t bboxVAO, bboxVBO, bboxEBO;
+
+	glGenVertexArrays(1, &bboxVAO);
+
+	glGenBuffers(1, &bboxVBO);
+	glGenBuffers(1, &bboxEBO);
+
+	glBindVertexArray(bboxVAO);
+
+	glBindBuffer(GL_ARRAY_BUFFER, bboxVBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(bboxVerts), bboxVerts, GL_STATIC_DRAW);
+
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, bboxEBO);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(bboxIndices), bboxIndices, GL_STATIC_DRAW);
+
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+
+	glBindVertexArray(0);
+
+
 
 
 	glfwSetKeyCallback(window, keyCallback);
@@ -564,12 +611,22 @@ int main(int argc, char* argv[]) {
 
 		//glViewport(0, 0, framebufferWidth, framebufferHeight);
 
+		//BBox
+		bboxShader.use();
+		bboxShader.setMat4("mvp", perspectiveProjection * view * glm::mat4(1.0f));
+		bboxShader.setVec3("lineColor", glm::vec3(0.7f, 0.9f, 1.0f));
+		glBindVertexArray(bboxVAO);
+		glDrawElements(GL_LINES, 24, GL_UNSIGNED_INT, nullptr);
+		glBindVertexArray(0);
 
 		//Particle System
-		particleSystem.Update(deltaTime);
+		float particleRadius = 15.0f;
+		float simparticleRadius = 0.01f;
+		float wallDamping = 0.8f;
+		particleSystem.Update(deltaTime, bboxMin, bboxMax, simparticleRadius, wallDamping);
 		glm::mat4 particleMVP = perspectiveProjection * view * glm::mat4(1.0f);
 		glm::vec3 particleColor(0.2f, 0.0f, 1.0f);
-		particleSystem.Render(particleMVP, particleColor, 3.0f);
+		particleSystem.Render(particleMVP, particleColor, particleRadius, glm::vec2(framebufferWidth, framebufferHeight), perspectiveProjection, view, lightPosWorld);
 
 		//plane
 		quadShader.use();
