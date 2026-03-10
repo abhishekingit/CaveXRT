@@ -6,10 +6,12 @@
 
 https://github.com/user-attachments/assets/edb9c679-09b3-4ae1-a8b5-c431c7f1fe30
 
+### Bounding boxes and collisions 
+
+https://github.com/user-attachments/assets/57ba525c-6b77-4b64-906f-2c669de891b1
 
 
-Simple particle system using compute shaders. Particles are initialized with random positions and velocities and updated each frame based on delta time. Here the particles are rendered as points with a basic shader that colors them. 
-Here the Particle system doesn't support collisions/hitboxes yet which is why it passes through the quad. 
+Simple particle system using compute shaders. Particles are initialized with random positions and velocities and updated each frame based on delta time. Here the particles are rendered as points with a basic shader that colors them. Particle systems support collisions using bounding boxes and also theres a damping factor added to the velocity computation. 
 
 ### Requirements
 - CMake >= 3.20
