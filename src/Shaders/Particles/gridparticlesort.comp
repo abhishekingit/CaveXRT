@@ -1,0 +1,35 @@
+#version 430 core
+
+layout (local_size_x = 4, local_size_y = 4, local_size_z = 4) in;
+
+layout(std430, binding = 4) buffer CellWrite {
+	uint cellWriteBuf[];
+};
+
+layout(std430, binding = 5) readonly buffer ParticleCell {
+	uint particleCell[];
+};
+
+layout(std430, binding = 6) buffer SortedIndex {
+	uint sortedIndexBuf[];
+};
+
+uniform uint particleCount;
+
+uint linearThreadID() {
+	uvec3 wg = gl_NumWorkGroups;
+	uvec3 gID = gl_WorkGroupID;
+	uvec3 lID = gl_LocalInvocationID;
+	uint groupLinear = gID.x + wg.x * (gID.y + wg.y * gID.z);
+	uint localLinear = lID.x + 4u * (lID.y + 4u * lID.z);
+	return groupLinear * 64u + localLinear;
+}
+
+void main() {
+	uint idx = linearThreadID();
+	if(idx >= particleCount) return;
+
+	uint cell = particleCell[idx];
+	uint destIdx = atomicAdd(cellWriteBuf[cell], 1u);
+	sortedIndexBuf[destIdx] = idx;
+}

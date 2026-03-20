@@ -74,6 +74,7 @@ float glossiness = 128;
 
 glm::vec3 bboxMin(-1.5f, 0.0f, -0.7f);
 glm::vec3 bboxMax(1.5f, 1.8f, 0.7f);
+float simparticleRadius = 0.01f;
 
 float bboxVerts[] = {
 	bboxMin.x, bboxMin.y, bboxMin.z,
@@ -334,7 +335,14 @@ int main(int argc, char* argv[]) {
 	Shader skyboxShader("../../../src/Shaders/skyboxvshader.vert", "../../../src/Shaders/skyboxfshader.frag");
 	Shader bboxShader("../../../src/Shaders/bboxvshader.vert", "../../../src/Shaders/bboxfshader.frag");
 
-	ParticleSystem particleSystem(1000, "../../../src/Shaders/Particles/particlecshader.comp", "../../../src/Shaders/Particles/particlevshader.vert", "../../../src/Shaders/Particles/particlefshader.frag");
+	ParticleSystem particleSystem(
+		10000,
+		simparticleRadius,
+		bboxMin,
+		bboxMax,
+		"../../../src/Shaders/Particles/particlecshader.comp",
+		"../../../src/Shaders/Particles/particlevshader.vert",
+		"../../../src/Shaders/Particles/particlefshader.frag");
 
 	
 
@@ -447,7 +455,7 @@ int main(int argc, char* argv[]) {
 
 	/*distance = modelRadius * 2.5f;
 	lightRadius = modelRadius * 1.5f;*/	
-	const float planeY = -0.4f;
+	const float planeY = -0.1f;
 	glm::mat4 reflectionMatrix = MakePlaneReflectionY(planeY);
 
 	while (!glfwWindowShouldClose(window)) {
@@ -614,16 +622,15 @@ int main(int argc, char* argv[]) {
 		//BBox
 		bboxShader.use();
 		bboxShader.setMat4("mvp", perspectiveProjection * view * glm::mat4(1.0f));
-		bboxShader.setVec3("lineColor", glm::vec3(0.7f, 0.9f, 1.0f));
+		bboxShader.setVec3("lineColor", glm::vec3(0.9f, 0.9f, 0.9f));
 		glBindVertexArray(bboxVAO);
 		glDrawElements(GL_LINES, 24, GL_UNSIGNED_INT, nullptr);
 		glBindVertexArray(0);
 
 		//Particle System
 		float particleRadius = 15.0f;
-		float simparticleRadius = 0.01f;
 		float wallDamping = 0.8f;
-		particleSystem.Update(deltaTime, bboxMin, bboxMax, simparticleRadius, wallDamping);
+		particleSystem.Update(0.0f, wallDamping);
 		glm::mat4 particleMVP = perspectiveProjection * view * glm::mat4(1.0f);
 		glm::vec3 particleColor(0.2f, 0.0f, 1.0f);
 		particleSystem.Render(particleMVP, particleColor, particleRadius, glm::vec2(framebufferWidth, framebufferHeight), perspectiveProjection, view, lightPosWorld);
@@ -634,7 +641,7 @@ int main(int argc, char* argv[]) {
 		planeModel = glm::translate(planeModel, glm::vec3(0.0f, planeY, 0.0f));
 		//planeModel = glm::translate(planeModel, -modelCenter);
 		planeModel = glm::rotate(planeModel, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-		planeModel = glm::scale(planeModel, glm::vec3(2.0f));
+		planeModel = glm::scale(planeModel, glm::vec3(4.0f));
 
 		glm::mat4 planeView = glm::lookAt(planeCameraPos, caveXRTConfig.cameraTarget, caveXRTConfig.cameraUp);
 
@@ -648,6 +655,10 @@ int main(int argc, char* argv[]) {
 		quadShader.setMat4("reflectionVP", reflectionVP);
 		quadShader.setFloat("width", reflectionRenderTarget.Width());
 		quadShader.setFloat("height", reflectionRenderTarget.Height());
+		quadShader.setFloat("checkerScale", 50.0f);
+		quadShader.setFloat("checkerColorStrength", 0.10f);
+		quadShader.setFloat("envBlend", 0.04f);
+		quadShader.setFloat("desaturationVal", 0.25f);
 
 		glActiveTexture(GL_TEXTURE0);
 		glBindTexture(GL_TEXTURE_2D, reflectionRenderTarget.GetColorTexture());
