@@ -12,7 +12,7 @@ https://github.com/user-attachments/assets/57ba525c-6b77-4b64-906f-2c669de891b1
 
 ### Uniform Grid for neighbour search
 
-https://github.com/user-attachments/assets/473096e1-6860-4bd3-9c70-4987ac14bb954
+https://github.com/user-attachments/assets/741e9e45-6e94-48e7-8ec9-a4de1ea8fe95
 
 Simple particle system using compute shaders. Particles are initialized with random positions and velocities and updated each frame based on delta time. Here the particles are rendered as points with a basic shader that colors them. Particle systems support collisions using bounding boxes and also theres a damping factor added to the velocity computation. The Uniform grid needed for performing neighbour search for SPH is visualized using the particles being arranged according to the grid and also colored according to the Cell IDs. The uniform grid operations like counting the particles and sorting are also performed using compute shaders. The grid helps in performing the simulation passes for density, viscosity and pressure efficiently. 
 
