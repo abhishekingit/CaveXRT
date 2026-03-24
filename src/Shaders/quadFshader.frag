@@ -1,4 +1,4 @@
-#version 330 core
+#version 410 core
 
 in qVS_out {
 	vec2 vUV;
@@ -24,6 +24,7 @@ uniform vec3 lightPos;
 uniform bool skyboxEnabled;
 uniform bool showDepthMap;
 uniform bool showReflections;
+uniform bool useNormalMap;
 
 uniform float width;
 uniform float height;
@@ -31,6 +32,7 @@ uniform float height;
 uniform sampler2D renderTexture;
 uniform samplerCube cubemaptexture;
 uniform sampler2D depthMap;
+uniform sampler2D normalMap;
 
 float shadowMapCalculation(vec4 fragPosLightSpace, vec3 normal, vec3 lightDir) {
 	vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
@@ -44,9 +46,28 @@ float shadowMapCalculation(vec4 fragPosLightSpace, vec3 normal, vec3 lightDir) {
 
 	float closestDepth = texture(depthMap, projCoords.xy).r;
 	float currentDepth = projCoords.z;
-	float bias = max(0.05 * (1.0 - dot(normal, lightDir)), 0.005);
+	float bias = max(0.001 * (1.0 - dot(normal, lightDir)), 0.005);
 	float shadow = currentDepth - bias > closestDepth ? 1.0 : 0.0;
 	return shadow;
+}
+
+vec3 getPlaneNormal() {
+	vec3 N = normalize(qfs_in.WorldNormal);
+	if(!useNormalMap) {
+		return N;
+	}
+
+	vec3 q1 = dFdx(qfs_in.WorldPos);
+	vec3 q2 = dFdy(qfs_in.WorldPos);
+	vec2 st1 = dFdx(qfs_in.vUV);
+	vec2 st2 = dFdy(qfs_in.vUV);
+
+	vec3 T = normalize(q1 * st2.t - q2 * st1.t);
+	vec3 B = normalize(cross(normalize(N), T));
+	mat3 TBN = mat3(T, B, normalize(N));
+	vec3 mapN = texture(normalMap, qfs_in.vUV).xyz * 2.0 - 1.0;
+	return normalize(TBN * mapN);
+
 }
 
 void main() {
@@ -71,7 +92,7 @@ void main() {
 
 	}
 	else {
-		vec3 norm = normalize(qfs_in.WorldNormal);
+		vec3 norm = getPlaneNormal();
 		vec3 lightDir = normalize(lightPos - qfs_in.WorldPos);
 		vec3 viewDir = normalize(cameraPosWorld - qfs_in.WorldPos);
 		vec3 halfVec = normalize(lightDir + viewDir);
@@ -88,7 +109,7 @@ void main() {
 		}
 
 		float shadow = shadowMapCalculation(qfs_in.FragPosLightSpace, norm, lightDir);
-		finalColor = ambient + (1.0 - shadow) * (diffuseTerm + specularTerm);
+		finalColor = ambientTerm + (1.0 - shadow) * (diffuseTerm + specularTerm);
 
 	}
 

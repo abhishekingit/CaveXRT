@@ -1,4 +1,6 @@
+#include <algorithm>
 #include <iostream>
+#include <sstream>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
@@ -61,6 +63,7 @@ bool firstMouse = true;
 bool planeViewMode = false;
 bool planeCamDetached = false;
 bool lightMode = false;
+bool showTriangulation = false;
 float autoYaw = 0.0f;
 
 glm::vec3 lightPos(1.0f, 1.0f, 3.0f);
@@ -71,6 +74,11 @@ glm::vec3 Ks(1.0f, 1.0f, 1.0f);
 float ambientIntensity = 0.2;
 float specularIntensity = 1.0;
 float glossiness = 128;
+
+float tesselationInnerLevel = 16.0f;
+float tesselationOuterLevel = 16.0f;
+float displacementScale = 0.15f;
+bool spaceHeld = false;
 
 const uint32_t shadowWidth = 1024, shadowHeight = 1024;
 
@@ -103,10 +111,61 @@ struct AppConfig {
 	int width = 800;
 	int height = 600;
 	std::string modelPath;
+	std::string normalMapPath;
+	std::string displacementMapPath;
 };
+
+uint32_t loadTextureFromPath(const std::string& filePath) {
+	if (filePath.empty()) {
+		return 0;
+	}
+
+	std::vector<unsigned char> image;
+	uint32_t width, height;
+	uint32_t error = lodepng::decode(image, width, height, filePath);
+
+	if (error) {
+		std::cout << "Texture failed to load at path: " << filePath << "\n" << "Lodepng error: " << error << ":" << lodepng_error_text(error) << std::endl;
+		return 0;
+	}
+
+	uint32_t textureID = 0;
+	glGenTextures(1, &textureID);
+	glBindTexture(GL_TEXTURE_2D, textureID);
+
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image.data());
+
+	glGenerateMipmap(GL_TEXTURE_2D);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+	glBindTexture(GL_TEXTURE_2D, 0);
+	return textureID;
+
+}
+
+void updateTessellationTitle(GLFWwindow* window) {
+	static float lastInner = -1.0f;
+	static float lastOuter = -1.0f;
+
+	if (lastInner == tesselationInnerLevel && lastOuter == tesselationOuterLevel) {
+		return;
+	}
+
+	lastInner = tesselationInnerLevel;
+	lastOuter = tesselationOuterLevel;
+
+	std::ostringstream title;
+	title << "CaveXRT | Tess Inner: " << tesselationInnerLevel << " | Tess Outer: " << tesselationOuterLevel;
+	glfwSetWindowTitle(window, title.str().c_str());
+}
 
 void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
 	auto* state = static_cast<RenderState*>(glfwGetWindowUserPointer(window));
+	
 	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
 		glfwSetWindowShouldClose(window, true);
 	if (key == GLFW_KEY_F6 && action == GLFW_PRESS) {
@@ -148,6 +207,24 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
 		}
 			
 			
+	}
+	if (key == GLFW_KEY_SPACE && action == GLFW_PRESS) {
+		spaceHeld = true;
+		showTriangulation = true;
+	}
+	if (key == GLFW_KEY_SPACE && action == GLFW_RELEASE) {
+		spaceHeld = false;
+		showTriangulation = false;
+	}
+
+	if (spaceHeld && key == GLFW_KEY_LEFT && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
+		tesselationInnerLevel = std::max(1.0f, tesselationInnerLevel - 1.0f);
+		tesselationOuterLevel = std::max(1.0f, tesselationOuterLevel - 1.0f);
+	}
+
+	if (spaceHeld && key == GLFW_KEY_RIGHT && (action == GLFW_PRESS || action == GLFW_REPEAT)) {
+		tesselationInnerLevel += 1.0f;
+		tesselationOuterLevel += 1.0f;
 	}
 
 }
@@ -261,6 +338,12 @@ bool parseArguments(int argc, char* argv[], AppConfig& config) {
 			std::cout << "Usage: \n" << " CaveXRT.exe [options] <model.obj> \n\n" << "Options: \n" << "--width <int> Window width(default 800) \n" << "--height <int> Window height(default 600) \n";
 			return false;
 		}
+		else if (arg == "--normalMap" && i + 1 < argc) {
+			config.normalMapPath = argv[++i];
+		}
+		else if (arg == "--displacementMap" && i + 1 < argc) {
+			config.displacementMapPath = argv[++i];
+		}
 		else {
 			config.modelPath = arg;
 		}
@@ -279,15 +362,17 @@ int main(int argc, char* argv[]) {
 	
 
 	glfwInit();
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
 	AppConfig config;
-	/*if (!parseArguments(argc, argv, config)) {
+	if (!parseArguments(argc, argv, config)) {
 		return -1;
-	}*/
-	config.modelPath = "../../../assets/models/teapot/teapot.obj";
+	}
+	/*config.modelPath = "../../../assets/models/teapot/teapot.obj";
+	config.normalMapPath = "../../../assets/models/teapot/teapot_normal.png";
+	config.displacementMapPath = "../../../assets/models/teapot/teapot_disp.png";*/
 
 	std::cout << "Loading model: " << config.modelPath << "\n";
 	std::cout << "Window size: " << caveXRTConfig.width << "x" << caveXRTConfig.height << "\n";
@@ -311,9 +396,14 @@ int main(int argc, char* argv[]) {
 
 	Shader shaderprog1("../../../src/Shaders/vshader.vert", "../../../src/Shaders/fshader.frag");
 	Shader shaderprog2("../../../src/Shaders/cubevshader.vert", "../../../src/Shaders/cubefshader.frag");
-	Shader quadShader("../../../src/Shaders/quadVshader.vert", "../../../src/Shaders/quadFshader.frag");
+	Shader quadShader("../../../src/Shaders/quadTVshader.vert", "../../../src/Shaders/quadFshader.frag", nullptr, "../../../src/Shaders/quadTCshader.tesc", "../../../src/Shaders/quadTEshader.tese");
+	Shader quadLineShader("../../../src/Shaders/quadTVshader.vert", "../../../src/Shaders/quadLineFshader.frag", "../../../src/Shaders/quadGshader.geom", "../../../src/Shaders/quadTCshader.tesc", "../../../src/Shaders/quadTEshader.tese");
+
+
 	Shader skyboxShader("../../../src/Shaders/skyboxvshader.vert", "../../../src/Shaders/skyboxfshader.frag");
 	Shader depthShader("../../../src/Shaders/depthVshader.vert", "../../../src/Shaders/depthFshader.frag");
+
+	Shader quadDepthShader("../../../src/Shaders/depthVshader.vert", "../../../src/Shaders/depthFshader.frag", nullptr, "../../../src/Shaders/quadTCshader.tesc", "../../../src/Shaders/quadTEshader.tese");
 
 	int framebufferWidth = caveXRTConfig.width;
 	int framebufferHeight = caveXRTConfig.height;
@@ -382,8 +472,15 @@ int main(int argc, char* argv[]) {
 	ModelLoader lampModel("../../../assets/models/light/light.obj");
 
 	uint32_t cubemapTexture = loadCubemap(caveXRTConfig.skyboxConfig);
+	uint32_t normalMapTexture = loadTextureFromPath(config.normalMapPath);
+	uint32_t displacementMapTexture = loadTextureFromPath(config.displacementMapPath);
+
 	const int teapotEnvMapUnit = 5;
 	const int shadowMapUnit = 8;
+
+	if (normalMapTexture == 0) {
+		std::cout << "plane normal map texture disabled\n";
+	}
 
 	//Computing Model bounding box and center
 	glm::vec3 modelBoxMin(FLT_MAX);
@@ -544,7 +641,7 @@ int main(int argc, char* argv[]) {
 		glClear(GL_DEPTH_BUFFER_BIT);
 
 		float lightNearPlane = 0.1f;
-		float lightFarPlane = 6.5f;
+		float lightFarPlane = 20.0f;
 		float lightOrtho = maxExtent * scaleFactor * 2.0f;
 
 		glm::mat4 lightProjection = glm::ortho(-lightOrtho, lightOrtho, -lightOrtho, lightOrtho, lightNearPlane, lightFarPlane);
@@ -556,17 +653,37 @@ int main(int argc, char* argv[]) {
 
 		//teapotModel
 		depthShader.setMat4("model", model);
-		mainModel.Draw(depthShader);
+		//commenting out for now
+		//mainModel.Draw(depthShader);
 		
-		//planeModel;
-		/*glm::mat4 planeModelDepth = glm::mat4(1.0f);
+		// Displaced quad shadow caster: use depth-only pipeline with same tess/displacement stages
+		const bool hasDisp = (displacementMapTexture != 0);
+		glm::mat4 planeModelDepth = glm::mat4(1.0f);
 		planeModelDepth = glm::translate(planeModelDepth, glm::vec3(0.0f, planeY, 0.0f));
 		planeModelDepth = glm::rotate(planeModelDepth, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
 		planeModelDepth = glm::scale(planeModelDepth, glm::vec3(2.0f));
-		depthShader.setMat4("model", planeModelDepth);
+
+		quadDepthShader.use();
+		quadDepthShader.setMat4("model", planeModelDepth);
+		quadDepthShader.setMat4("view", lightView);
+		quadDepthShader.setMat4("projection", lightProjection);
+		quadDepthShader.setMat4("lightSpaceMatrix", lightSpaceMatrix);
+		quadDepthShader.setFloat("tessOuterLevel", tesselationOuterLevel);
+		quadDepthShader.setFloat("tessInnerLevel", tesselationInnerLevel);
+		quadDepthShader.setBool("useDisplacementMap", hasDisp);
+		quadDepthShader.setFloat("displacementScale", displacementScale);
+		quadDepthShader.setBool("useDispShadows", true);
+
+		if (hasDisp) {
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, displacementMapTexture);
+			quadDepthShader.setInt("displacementMap", 0);
+		}
+
+		glPatchParameteri(GL_PATCH_VERTICES, 4);
 		glBindVertexArray(quadVAO);
-		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
-		glBindVertexArray(0);*/
+		glDrawArrays(GL_PATCHES, 0, 4);
+		glBindVertexArray(0);
 
 		depthTarget.UnBind();
 		glViewport(0, 0, framebufferWidth, framebufferHeight);
@@ -601,7 +718,8 @@ int main(int argc, char* argv[]) {
 		shaderprog1.setMat4("lightSpaceMatrix", lightSpaceMatrix);
 		shaderprog1.setVec3("cameraPosWorld", cameraPos);
 		
-		mainModel.Draw(shaderprog1);
+		//commenting for now
+		//mainModel.Draw(shaderprog1);
 
 		//renderTarget.UnBind();
 
@@ -618,26 +736,36 @@ int main(int argc, char* argv[]) {
 
 		glm::mat4 planeView = glm::lookAt(planeCameraPos, caveXRTConfig.cameraTarget, caveXRTConfig.cameraUp);
 
+		
+
 		glm::mat4 planeMVP = perspectiveProjection * view * planeModel;
 		quadShader.setMat4("mvp", planeMVP);
 		quadShader.setMat4("model", planeModel);
 		quadShader.setMat4("view", view);
+		quadShader.setMat4("projection", perspectiveProjection);
 		quadShader.setMat4("lightSpaceMatrix", lightSpaceMatrix);
 		quadShader.setVec3("cameraPosWorld", cameraPos);
 		quadShader.setVec3("lightPos", lightPosWorld);
 		quadShader.setBool("skyboxEnabled", caveXRTConfig.skyboxConfig.enabled);
 		quadShader.setBool("showReflections", false);
 		quadShader.setBool("showDepthMap", false);
+		quadShader.setBool("useNormalMap", true);
+		quadShader.setFloat("tessOuterLevel", tesselationOuterLevel);
+		quadShader.setFloat("tessInnerLevel", tesselationInnerLevel);
+		quadShader.setBool("useDisplacementMap", hasDisp);
+		quadShader.setFloat("displacementScale", displacementScale);
+		quadShader.setBool("useDispShadows", false);
+
 		quadShader.setFloat("width", reflectionRenderTarget.Width());
 		quadShader.setFloat("height", reflectionRenderTarget.Height());
 
-		quadShader.setVec3("ambient", glm::vec3(0.3f, 0.3f, 0.3f));
-		quadShader.setVec3("diffuse", glm::vec3(0.4f, 0.4f, 0.4f));
-		quadShader.setVec3("specular", glm::vec3(0.2f, 0.2f, 0.2f));
+		quadShader.setVec3("ambient", glm::vec3(0.0f, 0.0f, 0.0f));
+		quadShader.setVec3("diffuse", glm::vec3(0.2f, 0.2f, 0.2f));
+		quadShader.setVec3("specular", glm::vec3(1.0f, 1.0f, 1.0f));
 
-		quadShader.setFloat("ambientIntensity", 0.35);
+		quadShader.setFloat("ambientIntensity", 1.0f);
 		quadShader.setFloat("specularIntensity", 1.0);
-		quadShader.setFloat("glossiness", 32);
+		quadShader.setFloat("glossiness", 32.0f);
 
 		//glActiveTexture(GL_TEXTURE0);
 		//glBindTexture(GL_TEXTURE_2D, reflectionRenderTarget.GetColorTexture());
@@ -652,11 +780,54 @@ int main(int argc, char* argv[]) {
 		glBindTexture(GL_TEXTURE_2D, depthTarget.GetDepthTexture());
 		quadShader.setInt("depthMap", 2);
 
+		if (normalMapTexture != 0) {
+			glActiveTexture(GL_TEXTURE3);
+			glBindTexture(GL_TEXTURE_2D, normalMapTexture);
+			quadShader.setInt("normalMap", 3);
+		}
+		
+		if (displacementMapTexture != 0) {
+			glActiveTexture(GL_TEXTURE4);
+			glBindTexture(GL_TEXTURE_2D, displacementMapTexture);
+			quadShader.setInt("displacementMap", 4);
+		}
+
+		glPatchParameteri(GL_PATCH_VERTICES, 4);
 
 		glBindVertexArray(quadVAO);
-		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
+		//glDrawElements(GL_PATCHES, 4, GL_UNSIGNED_INT, nullptr);
+		glDrawArrays(GL_PATCHES, 0, 4);
 		glBindVertexArray(0);
 	
+		if (showTriangulation) {
+			quadLineShader.use();
+			quadLineShader.setMat4("model", planeModel);
+			quadLineShader.setMat4("view", view);
+			quadLineShader.setMat4("projection", perspectiveProjection);
+			quadLineShader.setFloat("tessOuterLevel", tesselationOuterLevel);
+			quadLineShader.setFloat("tessInnerLevel", tesselationInnerLevel);
+			quadLineShader.setBool("useDisplacementMap", hasDisp);
+			quadLineShader.setFloat("displacementScale", displacementScale);
+			quadLineShader.setBool("useDispShadows", false);
+			
+			if (hasDisp) {
+				glActiveTexture(GL_TEXTURE0);
+				glBindTexture(GL_TEXTURE_2D, displacementMapTexture);
+				quadLineShader.setInt("displacementMap", 0);
+
+			}
+
+
+			quadLineShader.setFloat("lineDepthBiasNdc", 0.005f);
+			quadLineShader.setVec3("lineColor", glm::vec3(1.0f, 1.0f, 0.0f));
+			glBindVertexArray(quadVAO);
+			//glDrawElements(GL_PATCHES, 6, GL_UNSIGNED_INT, nullptr);
+			glDrawArrays(GL_PATCHES, 0, 4);
+			glBindVertexArray(0);
+		}
+
+		
+
 		glDepthMask(GL_FALSE);
 		glDepthFunc(GL_LEQUAL);
 
@@ -703,6 +874,7 @@ int main(int argc, char* argv[]) {
 
  		lampModel.Draw(shaderprog2);
 
+		updateTessellationTitle(window);
 		glfwSwapBuffers(window);
 
 		glfwPollEvents();

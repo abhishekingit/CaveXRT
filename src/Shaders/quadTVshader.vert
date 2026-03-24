@@ -9,11 +9,9 @@ out VS_OUT {
 	vec2 uv;
 } vs_out;
 
-uniform mat4 lightSpaceMatrix;
-uniform mat4 model;
-
 void main() {
 	vs_out.localPos = aPos;
 	vs_out.uv = aUV;
-	gl_Position = lightSpaceMatrix * model * vec4(aPos, 1.0);
+	gl_Position = vec4(aPos, 1.0);
+
 }

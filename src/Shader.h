@@ -10,6 +10,8 @@
 class Shader {
 public:
 	Shader(const char* vertexShaderPath, const char* fragmentShaderPath);
+	Shader(const char* vertexShaderPath, const char* fragmentShaderPath, const char* geometryShaderPath);
+	Shader(const char* vertexShaderPath, const char* fragmentShaderPath, const char* geometryShaderPath, const char* tessControlShaderPath, const char* tessEvalShaderPath);
 	void use() const;
 	void reloadShaders();
 
@@ -26,6 +28,9 @@ private:
 	uint32_t ShaderID;
 	const char* vertexShaderPath;
 	const char* fragmentShaderPath;
+	const char* geometryShaderPath;
+	const char* tessControlShaderPath;
+	const char* tessEvalShaderPath;
 
 	void compileAndLinkShaders();
 	
