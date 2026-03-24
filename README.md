@@ -73,3 +73,11 @@ Theres support for skybox added using cubemaps.
 <img alt="shadows" src="https://github.com/abhishekingit/CaveXRT/blob/main/results/shadows.gif?raw=true" data-hpc="true" class="Box-sc-g0xbh4-0 kzRgrI" height="512px">
 
 Shadow mapping implemented using depth maps. The scene is rendered from the light's perspective to create a depth map, which is then used in the main render pass to determine if fragments are in shadow. The shadows are hard-edged and there are some artifacts due to the lack of biasing and filtering, but it demonstrates basic shadow mapping.
+
+### Tessellation and Displacement Mapping
+
+<img width="637" height="380" alt="higherTesselation" src="https://github.com/user-attachments/assets/e89c7035-4570-4f88-961a-d1867092c0d1" />
+
+<img width="638" height="377" alt="triangulationDisplacementMap" src="https://github.com/user-attachments/assets/a55770c0-b531-4d9f-9b4f-4901f59d5192" />
+
+Tessellation is applied by rendering the quad as a patch `GL_PATCHES` and controlling subdivision density through `tessInnerLevel` and `tessOuterLevel`. The tessellation control and evaluation shaders refine the base quad into a denser surface at runtime, which allows smooth level-of-detail style control directly from input. This is what enables interactive surface refinement while the app is running. Displacement mapping is layered on top of tessellation so geometric detail is actually pushed in/out instead of only changing shading normals. The displacement map is sampled in the tessellation path, scaled by `displacementScale`, and used to offset the tessellated surface.
