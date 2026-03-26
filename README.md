@@ -18,9 +18,15 @@ https://github.com/user-attachments/assets/741e9e45-6e94-48e7-8ec9-a4de1ea8fe95
 
 https://github.com/user-attachments/assets/a244efc1-2b6a-430a-bb62-12a78f3cfbe0
 
+### Viscosity forces 
+
+https://github.com/user-attachments/assets/b2bdc704-cfa4-46aa-a592-d4c58e22fc48
+
 Simple particle system using compute shaders. Particles are initialized along the uniform grid and positions and velocities are updated each frame based on delta time. Here the particles are rendered as points with a basic shader that colors them. Particle systems support collisions using bounding boxes and also theres a damping factor added to the velocity computation. The Uniform grid needed for performing neighbour search for SPH is visualized using the particles being arranged according to the grid and also colored according to the Cell IDs. The uniform grid operations like counting the particles and sorting are also performed using compute shaders. The grid helps in performing the simulation passes for density, viscosity and pressure efficiently. 
 
 The density pass is the first SPH pass where the cubic kernel is used for smoothing and the uniform grid helps in computation of density for each particle based on neighbours. For visualizing I am coloring the particles based on density. The density pass is essential for other passes involving viscosity and pressure solvers. The smoothing radius here is chosen as the grid cell size which is particle sim radius * 4 which captures a good amount of neighbours for each particle. The gravity force is added as acceleration for the integrator. 
+
+This viscosity compute pass processes one particle per GPU thread and computes a smoothing acceleration from nearby particles to damp noisy velocity differences. It first finds the current particle’s grid cell using particleCell, then searches only the 27 neighboring cells (3×3×3) using the prebuilt uniform grid buffers (countBuf, cellWriteBuf, sortedIndexBuf) instead of checking all particles globally. Visually with increasing the viscosity coefficient the particles spreads less on the surface after falling and are grouped more together and the vice versa. The Viscosity forces visualization above uses a viscosity coefficient of 0.03f. Using a higher value like 0.1f-0.5f results in thicker fluid behaviour.
 
 ### Requirements
 - CMake >= 3.20
