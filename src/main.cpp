@@ -345,7 +345,7 @@ int main(int argc, char* argv[]) {
 	Shader bboxShader("../../../src/Shaders/bboxvshader.vert", "../../../src/Shaders/bboxfshader.frag");
 
 	ParticleSystem particleSystem(
-		10000,
+		50000,
 		simparticleRadius,
 		bboxMin,
 		bboxMax,

@@ -14,6 +14,10 @@ layout(std430, binding = 7) buffer ParticleDensities {
 	float densityBuf[];
 };
 
+layout(std430, binding = 8) buffer ParticleViscosities {
+	vec4 viscosityAccelBuf[];
+};
+
 uniform vec3 boxMin;
 uniform vec3 boxMax;
 uniform vec3 gravity;
@@ -34,7 +38,7 @@ void main() {
 
 //	float rho = max(densityBuf[idx], 1e-6);
 
-	vec3 a = gravity;
+	vec3 a = gravity + viscosityAccelBuf[idx].xyz;
 
 	//density test
 //	float buoyancy = buoyancyCoeff * (restDensity - rho) / restDensity;

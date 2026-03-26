@@ -16,9 +16,11 @@ ParticleSystem::ParticleSystem(size_t maxParticles, float simRadius, const glm::
 	gridParticleReorderProgram = new CaveCompute("../../../src/Shaders/Particles/gridparticlesort.comp");
 
 	densityComputeProgram = new CaveCompute("../../../src/Shaders/Particles/densitysimcshader.comp");
+	viscosityComputeProgram = new CaveCompute("../../../src/Shaders/Particles/viscositysimcshader.comp");
 
 	this->GRAVITY = glm::vec3(0.0f, -9.81f, 0.0f);
 	this->restDensity = 1000.0f;
+	this->viscosityCoeff = 0.03f;
 
 	InitializeGrid();
 	InitializeParticles();
@@ -40,6 +42,11 @@ ParticleSystem::~ParticleSystem() {
 		ssboDensity = 0;
 	}
 
+	if(ssboViscosityAccel) {
+		glDeleteBuffers(1, &ssboViscosityAccel);
+		ssboViscosityAccel = 0;
+	}
+
 	if (vao) {
 		glDeleteVertexArrays(1, &vao);
 		vao = 0;
@@ -53,6 +60,11 @@ ParticleSystem::~ParticleSystem() {
 	if (densityComputeProgram) {
 		delete densityComputeProgram;
 		densityComputeProgram = nullptr;
+	}
+
+	if (viscosityComputeProgram) {
+		delete viscosityComputeProgram;
+		viscosityComputeProgram = nullptr;
 	}
 
 	if (renderShader) {
@@ -164,7 +176,7 @@ void ParticleSystem::InitializeParticles() {
 
 	uint32_t idx = 0;
 
-	for (int z = 0; z < GRID_RES.z && idx < maxParticles; z++) {
+	/*for (int z = 0; z < GRID_RES.z && idx < maxParticles; z++) {
 		for (int y = 0; y < GRID_RES.y && idx < maxParticles; y++) {
 			for (int x = 0; x < GRID_RES.x && idx < maxParticles; x++) {
 				glm::vec3 p = GRID_MIN + (glm::vec3((float)x, (float)y, (float)z) + 0.5f) * GRID_CELL_SIZE;
@@ -194,14 +206,11 @@ void ParticleSystem::InitializeParticles() {
 		particles[idx].velocityX = 0.0f;
 		particles[idx].velocityY = 0.0f;
 		particles[idx].velocityZ = 0.0f;
-	}
+	}*/
 
-	initialPositions = posData;
-	initialVelocities = velData;
-
-	/*for (uint32_t i = 0; i < maxParticles; i++) {
+	for (uint32_t i = 0; i < maxParticles; i++) {
 		float pX = ux(rng) * 0.5f;
-		float pY = uy(rng) * 0.8f + 0.2f;
+		float pY = uy(rng) * 0.8f + 0.9f;
 		float pZ = uz(rng) * 0.5f;
 
 		float vX = vv(rng);
@@ -217,7 +226,12 @@ void ParticleSystem::InitializeParticles() {
 		particles[i].velocityX = vX;
 		particles[i].velocityY = vY;
 		particles[i].velocityZ = vZ;
-	}*/
+	}
+
+	initialPositions = posData;
+	initialVelocities = velData;
+
+	
 
 	if (ssboPos == 0) glGenBuffers(1, &ssboPos);
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssboPos);
@@ -235,6 +249,12 @@ void ParticleSystem::InitializeParticles() {
 	glBufferData(GL_SHADER_STORAGE_BUFFER, densityData.size() * sizeof(float), densityData.data(), GL_DYNAMIC_DRAW);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 7, ssboDensity);
 
+	if (ssboViscosityAccel == 0) glGenBuffers(1, &ssboViscosityAccel);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssboViscosityAccel);
+	std::vector<glm::vec4> viscosityData(maxParticles, glm::vec4(0.0f));
+	glBufferData(GL_SHADER_STORAGE_BUFFER, viscosityData.size() * sizeof(glm::vec4), viscosityData.data(), GL_DYNAMIC_DRAW);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 8, ssboViscosityAccel);
+
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
 	if (vao == 0) glGenVertexArrays(1, &vao);
@@ -249,6 +269,15 @@ void ParticleSystem::Update(float deltaTime, float wallDamping) {
 	//build uniform grid
 	BuildUniformGrid();
 	uint32_t groups = (maxParticles + workGroupSize - 1) / workGroupSize;
+	//const float dt = std::min(deltaTime, 1.0f / 120.0f);
+	
+	//smoothing kernel radius
+	const float h = GRID_CELL_SIZE;
+
+	//particle spacing(particle radius * 4.0f) for more neighbours
+	const float r = GRID_CELL_SIZE;
+	//const float dx = PARTICLE_SIM_RADIUS * 2.0f;
+	const float mass = this->restDensity * r * r * r;
 	
 	//density pass SPH
 	if (!densityComputeProgram) return;
@@ -257,20 +286,25 @@ void ParticleSystem::Update(float deltaTime, float wallDamping) {
 	densityComputeProgram->setUint("gridResX", static_cast<uint32_t>(GRID_RES.x));
 	densityComputeProgram->setUint("gridResY", static_cast<uint32_t>(GRID_RES.y));
 	densityComputeProgram->setUint("gridResZ", static_cast<uint32_t>(GRID_RES.z));
-
-	//smoothing kernel radius
-	const float h = GRID_CELL_SIZE;
-
-	//particle spacing(particle radius * 4.0f) for more neighbours
-	const float r = GRID_CELL_SIZE;
-	const float mass = this->restDensity * r * r * r;
-
 	densityComputeProgram->setFloat("h", h);
 	densityComputeProgram->setFloat("mass", mass);
 	densityComputeProgram->setFloat("PI", this->PI);
 	densityComputeProgram->dispatch(groups, 1, 1);
 	glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
+	//viscosity pass SPH
+	if (!viscosityComputeProgram) return;
+	viscosityComputeProgram->use();
+	viscosityComputeProgram->setUint("particleCount", maxParticles);
+	viscosityComputeProgram->setUint("gridResX", static_cast<uint32_t>(GRID_RES.x));
+	viscosityComputeProgram->setUint("gridResY", static_cast<uint32_t>(GRID_RES.y));
+	viscosityComputeProgram->setUint("gridResZ", static_cast<uint32_t>(GRID_RES.z));
+	viscosityComputeProgram->setFloat("h", h);
+	viscosityComputeProgram->setFloat("mass", mass);
+	viscosityComputeProgram->setFloat("PI", this->PI);
+	viscosityComputeProgram->setFloat("viscosityCoeff", this->viscosityCoeff);
+	viscosityComputeProgram->dispatch(groups, 1, 1);
+	glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
 	if (!computeProgram) return;
 	computeProgram->use();
@@ -282,7 +316,7 @@ void ParticleSystem::Update(float deltaTime, float wallDamping) {
 	computeProgram->setVec3("gravity", this->GRAVITY);
 	computeProgram->setFloat("wallDamping", wallDamping);
 
-	//density test
+	//part of density debug test
 	computeProgram->setFloat("restDensity", this->restDensity);
 	computeProgram->setFloat("buoyancyCoeff", 0.05f);
 	computeProgram->setFloat("densityDragCoeff", 0.2f);

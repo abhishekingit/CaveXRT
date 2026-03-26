@@ -36,6 +36,7 @@ private:
 
 	glm::vec3 GRAVITY;
 	float restDensity;
+	float viscosityCoeff;
 
 	uint32_t ssboPos = 0;
 	uint32_t ssboVel = 0;
@@ -50,6 +51,7 @@ private:
 
 	//sph ssbos
 	uint32_t ssboDensity = 0;
+	uint32_t ssboViscosityAccel = 0;
 
 	const uint32_t workGroupSize = 256;
 
@@ -63,6 +65,8 @@ private:
 	CaveCompute* computeProgram = nullptr;
 	//density compute
 	CaveCompute* densityComputeProgram = nullptr;
+	//viscosity compute
+	CaveCompute* viscosityComputeProgram = nullptr;
 
 	//cached initial state for reset
 	std::vector<glm::vec4> initialPositions;
