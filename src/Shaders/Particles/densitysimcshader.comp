@@ -1,0 +1,80 @@
+#version 430 core
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(std430, binding = 0) buffer Particles { vec4 pos[]; };
+layout(std430, binding = 2) buffer CellCount { uint countBuf[]; };
+layout(std430, binding = 3) buffer CellWrite { uint cellWriteBuf[]; };
+layout(std430, binding = 5) buffer ParticleCell { uint particleCell[]; };
+layout(std430, binding = 6) buffer SortedIndex { uint sortedIndexBuf[]; };
+layout(std430, binding = 7) buffer ParticleDensities { float densityBuf[]; };
+
+uniform uint particleCount;
+uniform uint gridResX;
+uniform uint gridResY;
+uniform uint gridResZ;
+
+uniform float h;
+uniform float mass;
+uniform float PI;
+
+uint flatten(uvec3 c) {
+	return c.x + gridResX * (c.y + gridResY * c.z);
+}
+
+float W_cubic(float r, float hVal) {
+	float q = r / hVal;
+	if(q >= 1.0) return 0.0;
+	float sigma = 8.0 / (PI * hVal * hVal * hVal);
+
+	if(q < 0.5) {
+		return sigma * (6.0 * q * q * q - 6.0 * q * q + 1.0);
+	}
+	else {
+		float a = 1.0 - q;
+		return sigma * 2.0 * a * a * a;
+	}
+
+}
+
+void main() {
+	uint idx = gl_GlobalInvocationID.x;
+	if(idx >= particleCount) return;
+
+	vec3 p = pos[idx].xyz;
+	uint cellId = particleCell[idx];
+
+	ivec3 base = ivec3(int(cellId % gridResX), int((cellId / (gridResX) % gridResY)), int(cellId / (gridResX * gridResY)));
+
+	float rho = 0.0;
+
+	for(int dz = -1; dz <= 1; dz++) {
+		for(int dy = -1; dy <= 1; dy++) {
+			for(int dx = -1; dx <= 1; dx++) {
+				ivec3 c = base + ivec3(dx, dy, dz);
+				if(c.x < 0 || c.y < 0 || c.z < 0) continue;
+				if(c.x >= int(gridResX) || c.y >= int(gridResY) || c.z >= int(gridResZ)) continue;
+
+				uint nCell = flatten(c);
+				uint start = cellWriteBuf[nCell];
+				uint count = countBuf[nCell];
+
+				for(uint i = 0; i < count; i++) {
+					uint j = sortedIndexBuf[start + i];
+					if(j == idx) continue;
+					float r = length(p - pos[j].xyz);
+					if(r < h) {
+						rho += mass * W_cubic(r, h);
+					}
+
+				}
+
+
+			}
+
+		}
+
+	}
+	densityBuf[idx] = rho; 
+
+}

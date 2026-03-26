@@ -117,6 +117,7 @@ struct RenderState {
 	RenderTarget* renderTarget{};
 	int* framebufferWidth{};
 	int* framebufferHeight{};
+	ParticleSystem* particleSystem{};
 };
 
 struct AppConfig {
@@ -168,6 +169,14 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
 		}
 			
 			
+	}
+	if (key == GLFW_KEY_P && action == GLFW_PRESS) {
+		if (state) {
+			state->particleSystem->ResetParticles();
+		}
+		else {
+			std::cout << "Particle System cast error in Key Callback" << std::endl;
+		}
 	}
 
 }
@@ -359,7 +368,8 @@ int main(int argc, char* argv[]) {
 		.config = &caveXRTConfig,
 		.renderTarget = &renderTarget,
 		.framebufferWidth = &framebufferWidth,
-		.framebufferHeight = &framebufferHeight	
+		.framebufferHeight = &framebufferHeight,
+		.particleSystem = &particleSystem
 
 	};
 
@@ -630,7 +640,7 @@ int main(int argc, char* argv[]) {
 		//Particle System
 		float particleRadius = 15.0f;
 		float wallDamping = 0.8f;
-		particleSystem.Update(0.0f, wallDamping);
+		particleSystem.Update(deltaTime, wallDamping);
 		glm::mat4 particleMVP = perspectiveProjection * view * glm::mat4(1.0f);
 		glm::vec3 particleColor(0.2f, 0.0f, 1.0f);
 		particleSystem.Render(particleMVP, particleColor, particleRadius, glm::vec2(framebufferWidth, framebufferHeight), perspectiveProjection, view, lightPosWorld);

@@ -15,6 +15,11 @@ ParticleSystem::ParticleSystem(size_t maxParticles, float simRadius, const glm::
 	gridParticleCountProgram = new CaveCompute("../../../src/Shaders/Particles/gridparticlecount.comp");
 	gridParticleReorderProgram = new CaveCompute("../../../src/Shaders/Particles/gridparticlesort.comp");
 
+	densityComputeProgram = new CaveCompute("../../../src/Shaders/Particles/densitysimcshader.comp");
+
+	this->GRAVITY = glm::vec3(0.0f, -9.81f, 0.0f);
+	this->restDensity = 1000.0f;
+
 	InitializeGrid();
 	InitializeParticles();
 }
@@ -30,6 +35,11 @@ ParticleSystem::~ParticleSystem() {
 		ssboVel = 0;
 	}
 
+	if(ssboDensity) {
+		glDeleteBuffers(1, &ssboDensity);
+		ssboDensity = 0;
+	}
+
 	if (vao) {
 		glDeleteVertexArrays(1, &vao);
 		vao = 0;
@@ -39,6 +49,12 @@ ParticleSystem::~ParticleSystem() {
 		delete computeProgram;
 		computeProgram = nullptr;
 	}
+
+	if (densityComputeProgram) {
+		delete densityComputeProgram;
+		densityComputeProgram = nullptr;
+	}
+
 	if (renderShader) {
 		delete renderShader;
 		renderShader = nullptr;
@@ -180,6 +196,9 @@ void ParticleSystem::InitializeParticles() {
 		particles[idx].velocityZ = 0.0f;
 	}
 
+	initialPositions = posData;
+	initialVelocities = velData;
+
 	/*for (uint32_t i = 0; i < maxParticles; i++) {
 		float pX = ux(rng) * 0.5f;
 		float pY = uy(rng) * 0.8f + 0.2f;
@@ -210,6 +229,12 @@ void ParticleSystem::InitializeParticles() {
 	glBufferData(GL_SHADER_STORAGE_BUFFER, velData.size() * sizeof(glm::vec4), velData.data(), GL_DYNAMIC_DRAW);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssboVel);
 
+	if (ssboDensity == 0) glGenBuffers(1, &ssboDensity);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssboDensity);
+	std::vector<float> densityData(maxParticles, this->restDensity);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, densityData.size() * sizeof(float), densityData.data(), GL_DYNAMIC_DRAW);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 7, ssboDensity);
+
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
 	if (vao == 0) glGenVertexArrays(1, &vao);
@@ -223,6 +248,29 @@ void ParticleSystem::InitializeParticles() {
 void ParticleSystem::Update(float deltaTime, float wallDamping) {
 	//build uniform grid
 	BuildUniformGrid();
+	uint32_t groups = (maxParticles + workGroupSize - 1) / workGroupSize;
+	
+	//density pass SPH
+	if (!densityComputeProgram) return;
+	densityComputeProgram->use();
+	densityComputeProgram->setUint("particleCount", maxParticles);
+	densityComputeProgram->setUint("gridResX", static_cast<uint32_t>(GRID_RES.x));
+	densityComputeProgram->setUint("gridResY", static_cast<uint32_t>(GRID_RES.y));
+	densityComputeProgram->setUint("gridResZ", static_cast<uint32_t>(GRID_RES.z));
+
+	//smoothing kernel radius
+	const float h = GRID_CELL_SIZE;
+
+	//particle spacing(particle radius * 4.0f) for more neighbours
+	const float r = GRID_CELL_SIZE;
+	const float mass = this->restDensity * r * r * r;
+
+	densityComputeProgram->setFloat("h", h);
+	densityComputeProgram->setFloat("mass", mass);
+	densityComputeProgram->setFloat("PI", this->PI);
+	densityComputeProgram->dispatch(groups, 1, 1);
+	glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
 
 	if (!computeProgram) return;
 	computeProgram->use();
@@ -231,8 +279,15 @@ void ParticleSystem::Update(float deltaTime, float wallDamping) {
 	computeProgram->setVec3("boxMin", this->GRID_MIN);
 	computeProgram->setVec3("boxMax", this->GRID_MAX);
 	computeProgram->setFloat("particleRadius", this->PARTICLE_SIM_RADIUS);
+	computeProgram->setVec3("gravity", this->GRAVITY);
 	computeProgram->setFloat("wallDamping", wallDamping);
-	uint32_t groups = (maxParticles + workGroupSize - 1) / workGroupSize;
+
+	//density test
+	computeProgram->setFloat("restDensity", this->restDensity);
+	computeProgram->setFloat("buoyancyCoeff", 0.05f);
+	computeProgram->setFloat("densityDragCoeff", 0.2f);
+
+	
 	computeProgram->dispatch(groups, 1, 1);
 	glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
 
@@ -249,12 +304,36 @@ void ParticleSystem::Render(const glm::mat4& mvp, const glm::vec3 &particleColor
 	renderShader->setVec2("viewportSize", viewportSize);
 	renderShader->setVec3("lightPosView", glm::vec3(view * glm::vec4(lightWorldPos, 1.0)));
 	renderShader->setFloat("pointSize", pointSize);
-	renderShader->setBool("debugCellColor", true);
+	renderShader->setBool("debugCellColor", false);
+	renderShader->setBool("debugDensityColor", true);
 	renderShader->setVec3("gridRes", glm::vec3(GRID_RES));
 	renderShader->setVec3("particleColor", particleColor);
+
+	renderShader->setVec2("densityMinMax", glm::vec2(restDensity * 0.2, restDensity * 1.5f));
 	//need to decide for simple/lean blinn phong shading uniforms
 
 	glDrawArrays(GL_POINTS, 0, maxParticles);
 	glBindVertexArray(0);
+
+}
+
+void ParticleSystem::ResetParticles() {
+	if (initialPositions.empty() || initialVelocities.empty()) return;
+
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssboPos);
+	glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, initialPositions.size() * sizeof(glm::vec4), initialPositions.data());
+
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssboVel);
+	glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, initialVelocities.size() * sizeof(glm::vec4), initialVelocities.data());
+
+	// optional: reset density buffer to rest density
+	if (ssboDensity) {
+		std::vector<float> densityData(maxParticles, restDensity);
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssboDensity);
+		glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, densityData.size() * sizeof(float), densityData.data());
+	}
+
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+	glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
 
 }

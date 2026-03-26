@@ -20,16 +20,22 @@ public:
 	void Update(float deltaTime, float wallDamping);
 	void Render(const glm::mat4& mvp, const glm::vec3& particleColor, float pointSize, const glm::vec2& viewportSize, const glm::mat4& projection, const glm::mat4& view, const glm::vec3& lightWorldPos);
 
+	void ResetParticles();
+
 private:
 	size_t maxParticles;
 	std::vector<Particle> particles;
 	float PARTICLE_SIM_RADIUS = 0.02f;
 	float GRID_CELL_SIZE = PARTICLE_SIM_RADIUS * 4.0f;
+	float PI = 3.14159265359;
 	glm::vec3 GRID_MIN;
 	glm::vec3 GRID_MAX;
 	glm::vec3 GRID_SIZE;
 	glm::ivec3 GRID_RES;
 	uint32_t GRID_VOXEL_COUNT;
+
+	glm::vec3 GRAVITY;
+	float restDensity;
 
 	uint32_t ssboPos = 0;
 	uint32_t ssboVel = 0;
@@ -42,15 +48,25 @@ private:
 	uint32_t ssboParticleCell = 0;
 	uint32_t ssboSortedIndex = 0;
 
+	//sph ssbos
+	uint32_t ssboDensity = 0;
+
 	const uint32_t workGroupSize = 256;
 
 
-	Shader* renderShader = nullptr;
-	CaveCompute* computeProgram = nullptr;
+	Shader* renderShader = nullptr;	
 	CaveCompute* gridClearProgram = nullptr;
 	CaveCompute* gridParticleCountProgram = nullptr;
 	CaveCompute* gridParticleReorderProgram = nullptr;
 
+	//integrator
+	CaveCompute* computeProgram = nullptr;
+	//density compute
+	CaveCompute* densityComputeProgram = nullptr;
+
+	//cached initial state for reset
+	std::vector<glm::vec4> initialPositions;
+	std::vector<glm::vec4> initialVelocities;
 
 	void InitializeGrid();
 	void BuildUniformGrid();

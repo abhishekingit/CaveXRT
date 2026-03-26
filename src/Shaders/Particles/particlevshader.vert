@@ -9,6 +9,10 @@ layout(std430, binding = 5) buffer ParticleCell {
     uint particleCell[];
 };
 
+layout(std430, binding = 7) buffer ParticleDensities { 
+    float densityBuf[]; 
+};
+
 uniform mat4 mvp;
 uniform float pointSize;
 uniform mat4 view;
@@ -19,6 +23,7 @@ uniform vec2 viewportSize;
 out vec3 ViewPos;
 out float RadiusView;
 flat out uint CellID;
+out float ParticleDensity;
 
 void main() {
 	vec3 p = positions[gl_VertexID].xyz;
@@ -36,6 +41,8 @@ void main() {
     RadiusView = pixelDiameter * dist / (proj11 * viewportSize.y);
 
     CellID = particleCell[gl_VertexID];
+    ParticleDensity = densityBuf[gl_VertexID];
+
     
     gl_PointSize = clamp(pixelDiameter, 1.0, 256.0);
 

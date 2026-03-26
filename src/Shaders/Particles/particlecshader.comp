@@ -10,18 +10,45 @@ layout(std430, binding = 1) buffer Velocities {
 	vec4 vel[];
 };
 
+layout(std430, binding = 7) buffer ParticleDensities {
+	float densityBuf[];
+};
+
 uniform vec3 boxMin;
 uniform vec3 boxMax;
+uniform vec3 gravity;
 uniform float particleRadius;
 uniform float deltaTime;
 uniform float wallDamping;
 uniform uint particleCount;
 
+//test
+uniform float restDensity;
+uniform float buoyancyCoeff;
+uniform float densityDragCoeff;
+
+
 void main() {
 	uint idx = gl_GlobalInvocationID.x;
 	if(idx >= particleCount) return;
 
+//	float rho = max(densityBuf[idx], 1e-6);
+
+	vec3 a = gravity;
+
+	//density test
+//	float buoyancy = buoyancyCoeff * (restDensity - rho) / restDensity;
+//	a += vec3(0.0, buoyancy, 0.0);
+	
+
 	vec3 v = vel[idx].xyz;
+
+//	float drag = exp(-densityDragCoeff * max(0.0, rho - restDensity) / restDensity * deltaTime);
+//	v *= drag;
+
+
+	//v += deltaTime;
+	v += a * deltaTime;
 	
 	vec3 p = pos[idx].xyz;
 	p += v * deltaTime;
