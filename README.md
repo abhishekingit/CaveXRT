@@ -14,13 +14,19 @@ https://github.com/user-attachments/assets/57ba525c-6b77-4b64-906f-2c669de891b1
 
 https://github.com/user-attachments/assets/741e9e45-6e94-48e7-8ec9-a4de1ea8fe95
 
-Simple particle system using compute shaders. Particles are initialized with random positions and velocities and updated each frame based on delta time. Here the particles are rendered as points with a basic shader that colors them. Particle systems support collisions using bounding boxes and also theres a damping factor added to the velocity computation. The Uniform grid needed for performing neighbour search for SPH is visualized using the particles being arranged according to the grid and also colored according to the Cell IDs. The uniform grid operations like counting the particles and sorting are also performed using compute shaders. The grid helps in performing the simulation passes for density, viscosity and pressure efficiently. 
+### Density pass with gravity force
+
+https://github.com/user-attachments/assets/a244efc1-2b6a-430a-bb62-12a78f3cfbe0
+
+Simple particle system using compute shaders. Particles are initialized along the uniform grid and positions and velocities are updated each frame based on delta time. Here the particles are rendered as points with a basic shader that colors them. Particle systems support collisions using bounding boxes and also theres a damping factor added to the velocity computation. The Uniform grid needed for performing neighbour search for SPH is visualized using the particles being arranged according to the grid and also colored according to the Cell IDs. The uniform grid operations like counting the particles and sorting are also performed using compute shaders. The grid helps in performing the simulation passes for density, viscosity and pressure efficiently. 
+
+The density pass is the first SPH pass where the cubic kernel is used for smoothing and the uniform grid helps in computation of density for each particle based on neighbours. For visualizing I am coloring the particles based on density. The density pass is essential for other passes involving viscosity and pressure solvers. The smoothing radius here is chosen as the grid cell size which is particle sim radius * 4 which captures a good amount of neighbours for each particle. The gravity force is added as acceleration for the integrator. 
 
 ### Requirements
 - CMake >= 3.20
 - C++20 compiler (MSVC/Clang/GCC)
 - Ninja build system (recommended)
-- OpenGL 3.3 capable GPU and drivers
+- OpenGL 4.3 capable GPU and drivers
 
 ### Third-party libraries
 Submodules in `GL/` and built via `add_subdirectory`:
