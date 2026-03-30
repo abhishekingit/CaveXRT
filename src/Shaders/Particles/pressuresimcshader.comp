@@ -8,6 +8,8 @@ layout(std430, binding = 3) buffer CellWrite { uint cellWriteBuf[]; };
 layout(std430, binding = 5) buffer ParticleCell { uint particleCell[]; };
 layout(std430, binding = 6) buffer SortedIndex { uint sortedIndexBuf[]; };
 layout(std430, binding = 7) buffer ParticleDensities { float densityBuf[]; };
+layout(std430, binding = 9) buffer ParticlePressure { float pressureBuf[]; };
+layout(std430, binding = 10) buffer ParticlePressureAccel { vec4 pressureAccelBuf[]; };
 
 uniform uint particleCount;
 uniform uint gridResX;
@@ -18,6 +20,7 @@ uniform float h;
 uniform float mass;
 uniform float PI;
 uniform float restDensity;
+uniform float stiffness;
 
 uint flatten(uvec3 c) {
 	return c.x + gridResX * (c.y + gridResY * c.z);
@@ -38,16 +41,28 @@ float W_cubic(float r, float hVal) {
 
 }
 
+vec3 gradW_spiky(vec3 Rij, float r, float hVal) {
+	if(r <= 1e-6 || r >= hVal) return vec3(0.0);
+	float coeff = -45.0 / (PI * pow(hVal, 6.0));
+	float a = (hVal - r);
+	return coeff * a * a * (Rij / r);
+}
+
 void main() {
 	uint idx = gl_GlobalInvocationID.x;
 	if(idx >= particleCount) return;
 
-	vec3 p = pos[idx].xyz;
+	vec3 Pi = pos[idx].xyz;
+	float Rhoi = max(densityBuf[idx], 1e-6);
+
+	float PiPressure = max(stiffness * (Rhoi - restDensity), 0.0);
+	pressureBuf[idx] = PiPressure;
+
 	uint cellId = particleCell[idx];
 
 	ivec3 base = ivec3(int(cellId % gridResX), int((cellId / (gridResX) % gridResY)), int(cellId / (gridResX * gridResY)));
 
-	float rho = 0.0;
+	vec3 pressureAccel = vec3(0.0);
 
 	for(int dz = -1; dz <= 1; dz++) {
 		for(int dy = -1; dy <= 1; dy++) {
@@ -63,10 +78,18 @@ void main() {
 				for(uint i = 0u; i < count; i++) {
 					uint j = sortedIndexBuf[start + i];
 					if(j == idx) continue;
-					float r = length(p - pos[j].xyz);
-					if(r < h) {
-						rho += mass * W_cubic(r, h);
-					}
+
+					vec3 Rij = Pi - pos[j].xyz;
+					float r = length(Rij);
+					if(r >= h) continue;
+
+					float Rhoj = max(densityBuf[j], 1e-6);
+					float Pj = max(stiffness * (Rhoj - restDensity), 0.0);
+
+					vec3 gradW = gradW_spiky(Rij, r, h);
+					pressureAccel += -mass * (PiPressure + Pj) / (2.0 * Rhoj) * gradW;
+
+
 
 				}
 
@@ -75,7 +98,10 @@ void main() {
 
 		}
 
+
+
 	}
-	densityBuf[idx] = max(rho, restDensity); 
+	vec3 aPressure = pressureAccel / Rhoi;
+	pressureAccelBuf[idx] = vec4(aPressure, 0.0);
 
 }

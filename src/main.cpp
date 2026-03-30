@@ -74,7 +74,7 @@ float glossiness = 128;
 
 glm::vec3 bboxMin(-1.5f, 0.0f, -0.7f);
 glm::vec3 bboxMax(1.5f, 1.8f, 0.7f);
-float simparticleRadius = 0.01f;
+float simparticleRadius = 0.02f;
 
 float bboxVerts[] = {
 	bboxMin.x, bboxMin.y, bboxMin.z,
@@ -639,7 +639,7 @@ int main(int argc, char* argv[]) {
 
 		//Particle System
 		float particleRadius = 15.0f;
-		float wallDamping = 0.8f;
+		float wallDamping = 0.3f;
 		particleSystem.Update(deltaTime, wallDamping);
 		glm::mat4 particleMVP = perspectiveProjection * view * glm::mat4(1.0f);
 		glm::vec3 particleColor(0.2f, 0.0f, 1.0f);

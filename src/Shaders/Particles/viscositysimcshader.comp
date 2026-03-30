@@ -70,7 +70,7 @@ void main() {
 				uint start = cellWriteBuf[nCell];
 				uint count = countBuf[nCell];
 
-				for(uint i = 0; i < count; i++) {
+				for(uint i = 0u; i < count; i++) {
 					uint j = sortedIndexBuf[start + i];
 					if(j == idx) continue;
 
@@ -81,7 +81,7 @@ void main() {
 					float Rhoj = max(densityBuf[j], 1e-6);
 					vec3 Vj = vel[j].xyz;
 
-					viscAccel += viscosityCoeff * mass * (Vj - Vi) / Rhoj * W_cubic(r,h);
+					viscAccel += viscosityCoeff * mass * (Vj - Vi) / Rhoj * laplacianVisc(r, h);
 
 				}
 

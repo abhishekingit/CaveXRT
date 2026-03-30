@@ -17,10 +17,12 @@ ParticleSystem::ParticleSystem(size_t maxParticles, float simRadius, const glm::
 
 	densityComputeProgram = new CaveCompute("../../../src/Shaders/Particles/densitysimcshader.comp");
 	viscosityComputeProgram = new CaveCompute("../../../src/Shaders/Particles/viscositysimcshader.comp");
+	pressureComputeProgram = new CaveCompute("../../../src/Shaders/Particles/pressuresimcshader.comp");
 
 	this->GRAVITY = glm::vec3(0.0f, -9.81f, 0.0f);
 	this->restDensity = 1000.0f;
 	this->viscosityCoeff = 0.03f;
+	this->stiffness = 60.0f;
 
 	InitializeGrid();
 	InitializeParticles();
@@ -47,6 +49,16 @@ ParticleSystem::~ParticleSystem() {
 		ssboViscosityAccel = 0;
 	}
 
+	if (ssboPressure) {
+		glDeleteBuffers(1, &ssboPressure);
+		ssboPressure = 0;
+	}
+
+	if (ssboPressureAccel) {
+		glDeleteBuffers(1, &ssboPressureAccel);
+		ssboPressureAccel = 0;
+	}
+
 	if (vao) {
 		glDeleteVertexArrays(1, &vao);
 		vao = 0;
@@ -65,6 +77,11 @@ ParticleSystem::~ParticleSystem() {
 	if (viscosityComputeProgram) {
 		delete viscosityComputeProgram;
 		viscosityComputeProgram = nullptr;
+	}
+
+	if (pressureComputeProgram) {
+		delete pressureComputeProgram;
+		pressureComputeProgram = nullptr;
 	}
 
 	if (renderShader) {
@@ -255,6 +272,17 @@ void ParticleSystem::InitializeParticles() {
 	glBufferData(GL_SHADER_STORAGE_BUFFER, viscosityData.size() * sizeof(glm::vec4), viscosityData.data(), GL_DYNAMIC_DRAW);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 8, ssboViscosityAccel);
 
+	if (ssboPressure == 0) glGenBuffers(1, &ssboPressure);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssboPressure);
+	std::vector<float> pressureData(maxParticles, 0.0f);
+	glBufferData(GL_SHADER_STORAGE_BUFFER, pressureData.size() * sizeof(float), pressureData.data(), GL_DYNAMIC_DRAW);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 9, ssboPressure);
+
+	if (ssboPressureAccel == 0) glGenBuffers(1, &ssboPressureAccel);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssboPressureAccel);
+	std::vector<glm::vec4> pressureAccelData(maxParticles, glm::vec4(0.0f));
+	glBufferData(GL_SHADER_STORAGE_BUFFER, pressureAccelData.size() * sizeof(glm::vec4), pressureAccelData.data(), GL_DYNAMIC_DRAW);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 10, ssboPressureAccel);
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
 	if (vao == 0) glGenVertexArrays(1, &vao);
@@ -269,15 +297,15 @@ void ParticleSystem::Update(float deltaTime, float wallDamping) {
 	//build uniform grid
 	BuildUniformGrid();
 	uint32_t groups = (maxParticles + workGroupSize - 1) / workGroupSize;
-	//const float dt = std::min(deltaTime, 1.0f / 120.0f);
+	const float dt = std::min(deltaTime, 1.0f / 120.0f);
 	
 	//smoothing kernel radius
 	const float h = GRID_CELL_SIZE;
 
 	//particle spacing(particle radius * 4.0f) for more neighbours
 	const float r = GRID_CELL_SIZE;
-	//const float dx = PARTICLE_SIM_RADIUS * 2.0f;
-	const float mass = this->restDensity * r * r * r;
+	const float dx = PARTICLE_SIM_RADIUS * 2.0f;
+	const float mass = this->restDensity * dx * dx * dx;
 	
 	//density pass SPH
 	if (!densityComputeProgram) return;
@@ -289,6 +317,7 @@ void ParticleSystem::Update(float deltaTime, float wallDamping) {
 	densityComputeProgram->setFloat("h", h);
 	densityComputeProgram->setFloat("mass", mass);
 	densityComputeProgram->setFloat("PI", this->PI);
+	densityComputeProgram->setFloat("restDensity", this->restDensity);
 	densityComputeProgram->dispatch(groups, 1, 1);
 	glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
@@ -306,9 +335,23 @@ void ParticleSystem::Update(float deltaTime, float wallDamping) {
 	viscosityComputeProgram->dispatch(groups, 1, 1);
 	glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
+	if (!pressureComputeProgram) return;
+	pressureComputeProgram->use();
+	pressureComputeProgram->setUint("particleCount", maxParticles);
+	pressureComputeProgram->setUint("gridResX", static_cast<uint32_t>(GRID_RES.x));
+	pressureComputeProgram->setUint("gridResY", static_cast<uint32_t>(GRID_RES.y));
+	pressureComputeProgram->setUint("gridResZ", static_cast<uint32_t>(GRID_RES.z));
+	pressureComputeProgram->setFloat("h", h);
+	pressureComputeProgram->setFloat("mass", mass);
+	pressureComputeProgram->setFloat("PI", this->PI);
+	pressureComputeProgram->setFloat("restDensity", this->restDensity);
+	pressureComputeProgram->setFloat("stiffness", this->stiffness);
+	pressureComputeProgram->dispatch(groups, 1, 1);
+	glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
 	if (!computeProgram) return;
 	computeProgram->use();
-	computeProgram->setFloat("deltaTime", deltaTime);
+	computeProgram->setFloat("deltaTime", dt);
 	computeProgram->setUint("particleCount", maxParticles);
 	computeProgram->setVec3("boxMin", this->GRID_MIN);
 	computeProgram->setVec3("boxMax", this->GRID_MAX);
