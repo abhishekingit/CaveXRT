@@ -73,8 +73,8 @@ float specularIntensity = 1.0;
 float glossiness = 128;
 
 glm::vec3 bboxMin(-1.5f, 0.0f, -0.7f);
-glm::vec3 bboxMax(1.5f, 1.8f, 0.7f);
-float simparticleRadius = 0.02f;
+glm::vec3 bboxMax(1.5f, 4.0f, 0.7f);
+float simparticleRadius = 0.017f;
 
 float bboxVerts[] = {
 	bboxMin.x, bboxMin.y, bboxMin.z,
@@ -173,6 +173,26 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
 	if (key == GLFW_KEY_P && action == GLFW_PRESS) {
 		if (state) {
 			state->particleSystem->ResetParticles();
+		}
+		else {
+			std::cout << "Particle System cast error in Key Callback" << std::endl;
+		}
+	}
+
+	if ((key == GLFW_KEY_1 || key == GLFW_KEY_2 || key == GLFW_KEY_3) && action == GLFW_PRESS) {
+		if (state) {
+			if (key == GLFW_KEY_1) {
+				state->particleSystem->SetSpawnMode(ParticleSystem::SpawnMode::Random, true);
+				std::cout << "Spawn mode: Random" << std::endl;
+			}
+			else if (key == GLFW_KEY_2) {
+				state->particleSystem->SetSpawnMode(ParticleSystem::SpawnMode::SingleDam, true);
+				std::cout << "Spawn mode: SingleDam" << std::endl;
+			}
+			else {
+				state->particleSystem->SetSpawnMode(ParticleSystem::SpawnMode::DoubleDam, true);
+				std::cout << "Spawn mode: DoubleDam" << std::endl;
+			}
 		}
 		else {
 			std::cout << "Particle System cast error in Key Callback" << std::endl;
@@ -352,6 +372,8 @@ int main(int argc, char* argv[]) {
 		"../../../src/Shaders/Particles/particlecshader.comp",
 		"../../../src/Shaders/Particles/particlevshader.vert",
 		"../../../src/Shaders/Particles/particlefshader.frag");
+
+	particleSystem.SetSpawnMode(ParticleSystem::SpawnMode::DoubleDam, true);
 
 	
 
@@ -638,9 +660,10 @@ int main(int argc, char* argv[]) {
 		glBindVertexArray(0);
 
 		//Particle System
-		float particleRadius = 15.0f;
+		float particleRadius = 12.0f;
 		float wallDamping = 0.3f;
-		particleSystem.Update(deltaTime, wallDamping);
+		bool enableSPH = false;
+		particleSystem.Update(deltaTime, wallDamping, enableSPH);
 		glm::mat4 particleMVP = perspectiveProjection * view * glm::mat4(1.0f);
 		glm::vec3 particleColor(0.2f, 0.0f, 1.0f);
 		particleSystem.Render(particleMVP, particleColor, particleRadius, glm::vec2(framebufferWidth, framebufferHeight), perspectiveProjection, view, lightPosWorld);

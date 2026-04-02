@@ -1,0 +1,95 @@
+#version 430 core
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(std430, binding = 2) buffer CellCount { uint countBuf[]; };
+layout(std430, binding = 3) buffer CellOffset { uint cellOffsetBuf[]; };
+layout(std430, binding = 5) buffer ParticleCell { uint particleCell[]; };
+layout(std430, binding = 6) buffer SortedIndex { uint sortedIndexBuf[]; };
+layout(std430, binding = 7) buffer ParticleDensities { float densityBuf[]; };
+layout(std430, binding = 11) buffer PredictedPositions { vec4 predictedPos[]; };
+layout(std430, binding = 12) buffer Lambdas { float lambdaBuf[]; };
+
+uniform uint particleCount;
+uniform uint gridResX;
+uniform uint gridResY;
+uniform uint gridResZ;
+
+uniform float h;
+uniform float mass;
+uniform float PI;
+uniform float restDensity;
+uniform float relaxationEpsilon;
+
+uint flatten(uvec3 c) {
+	return c.x + gridResX * (c.y + gridResY * c.z);
+}
+
+float W_Poly6(float r, float hVal) {
+	if(r >= hVal) return 0.0;
+	float hr2 = hVal * hVal - r * r;
+	float sigma = 315.0 / (64.0 * PI * pow(hVal, 9));
+	return sigma * hr2 * hr2 * hr2;
+
+}
+
+vec3 gradW_spiky(vec3 Rij, float r, float hVal) {
+	if(r <= 1e-6 || r >= hVal) return vec3(0.0);
+	float coeff = -45.0 / (PI * pow(hVal, 6.0));
+	float a = (hVal - r);
+	return coeff * a * a * (Rij / r);
+}
+
+void main() {
+	uint idx = gl_GlobalInvocationID.x;
+	if(idx >= particleCount) return;
+
+	vec3 p = predictedPos[idx].xyz;
+	uint cellId = particleCell[idx];
+
+	ivec3 base = ivec3(int(cellId % gridResX), int((cellId / (gridResX) % gridResY)), int(cellId / (gridResX * gridResY)));
+
+	float rho = mass * W_Poly6(0.0, h);
+	float sumGrad2 = 0.0;
+	vec3 gradCiSelf = vec3(0.0);
+
+	for(int dz = -1; dz <= 1; dz++) {
+		for(int dy = -1; dy <= 1; dy++) {
+			for(int dx = -1; dx <= 1; dx++) {
+				ivec3 c = base + ivec3(dx, dy, dz);
+				if(c.x < 0 || c.y < 0 || c.z < 0) continue;
+				if(c.x >= int(gridResX) || c.y >= int(gridResY) || c.z >= int(gridResZ)) continue;
+
+				uint nCell = flatten(c);
+				uint start = cellOffsetBuf[nCell];
+				uint count = countBuf[nCell];
+
+				for(uint i = 0u; i < count; i++) {
+					uint j = sortedIndexBuf[start + i];
+					if(j == idx) continue;
+
+					vec3 Pij = p - predictedPos[j].xyz;
+					float r = length(Pij);
+					if(r >= h) continue;
+
+					rho += mass * W_Poly6(r, h);
+
+					vec3 gradCj = (mass / restDensity) * gradW_spiky(Pij, r, h);
+					sumGrad2 += dot(gradCj, gradCj);
+					gradCiSelf -= gradCj;
+
+				}
+
+
+			}
+
+		}
+
+	}
+	densityBuf[idx] = rho;
+	sumGrad2 += dot(gradCiSelf, gradCiSelf);
+	float Ci = max(rho / restDensity - 1.0, 0.0);
+	lambdaBuf[idx] = -Ci / (sumGrad2 + relaxationEpsilon);
+
+
+}

@@ -15,12 +15,20 @@ struct Particle {
 
 class ParticleSystem {
 public:
+	enum class SpawnMode {
+		Random = 0,
+		SingleDam = 1,
+		DoubleDam = 2
+	};
+
 	ParticleSystem(size_t maxParticles, float simRadius, const glm::vec3& gridMin, const glm::vec3& gridMax, const char* computeShaderPath, const char* vertexShaderPath, const char* fragmentShaderPath);
 	~ParticleSystem();
-	void Update(float deltaTime, float wallDamping);
+	void Update(float deltaTime, float wallDamping, bool enableSPH);
 	void Render(const glm::mat4& mvp, const glm::vec3& particleColor, float pointSize, const glm::vec2& viewportSize, const glm::mat4& projection, const glm::mat4& view, const glm::vec3& lightWorldPos);
 
 	void ResetParticles();
+	void SetSpawnMode(SpawnMode mode, bool reinitialize = true);
+	SpawnMode GetSpawnMode() const { return spawnMode; }
 
 private:
 	size_t maxParticles;
@@ -39,6 +47,15 @@ private:
 	float viscosityCoeff;
 	float stiffness;
 
+	uint32_t pbfSolverIterations = 4;
+	float pbfScorrK = 0.0001f;
+	float pbfScorrN = 4.0f;
+	float pbfEpsilon = 1e-5f;
+	float pbfScorrDQ = 0.1f;
+	float pbfRelaxation = 0.6f;
+	SpawnMode spawnMode = SpawnMode::Random;
+
+
 	uint32_t ssboPos = 0;
 	uint32_t ssboVel = 0;
 	uint32_t vao = 0;
@@ -56,6 +73,11 @@ private:
 	uint32_t ssboPressure = 0;
 	uint32_t ssboPressureAccel = 0;
 
+	//pbf ssbos
+	uint32_t ssboPredPos = 0;
+	uint32_t ssboLambda = 0;
+	uint32_t ssboDeltaPos = 0;
+
 	const uint32_t workGroupSize = 256;
 
 
@@ -72,6 +94,17 @@ private:
 	CaveCompute* viscosityComputeProgram = nullptr;
 	//pressure compute
 	CaveCompute* pressureComputeProgram = nullptr;
+
+	//pbf compute programs
+	CaveCompute* pbfPredictPosComputeProgram = nullptr;
+	CaveCompute* pbfLambdaComputeProgram = nullptr;
+	CaveCompute* pbfDeltaPosComputeProgram = nullptr;
+	CaveCompute* pbfApplyCorrComputeProgram = nullptr;
+	CaveCompute* pbfIntegrateComputeProgram = nullptr;
+	CaveCompute* pbfXSPHComputeProgram = nullptr;
+	CaveCompute* pbfXSPHApplyComputeProgram = nullptr;
+
+
 
 	//cached initial state for reset
 	std::vector<glm::vec4> initialPositions;

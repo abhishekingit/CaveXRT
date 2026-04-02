@@ -1,0 +1,39 @@
+#version 430 core
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(std430, binding = 0) buffer Particles { vec4 pos[]; };
+layout(std430, binding = 1) buffer Velocities { vec4 vel[]; };
+layout(std430, binding = 11) buffer PredictedPositions { vec4 predictedPos[]; };
+
+uniform uint particleCount;
+uniform float deltaTime;
+uniform vec3 boxMin;
+uniform vec3 boxMax;
+uniform float particleRadius;
+uniform float wallDamping;
+
+void main() {
+	uint idx = gl_GlobalInvocationID.x;
+	if(idx >= particleCount) return;
+
+	vec3 Pold = pos[idx].xyz;
+	vec3 Pnew = predictedPos[idx].xyz;
+	vec3 Vnew = (Pnew - Pold) / max(deltaTime, 1e-6);
+
+	vec3 minB = boxMin + vec3(particleRadius);
+	vec3 maxB = boxMax - vec3(particleRadius);
+
+	if(Pnew.x <= minB.x && Vnew.x < 0.0) Vnew.x = -Vnew.x * wallDamping;
+	if(Pnew.x >= maxB.x && Vnew.x > 0.0) Vnew.x = -Vnew.x * wallDamping;
+
+	if(Pnew.y <= minB.y && Vnew.y < 0.0) Vnew.y = -Vnew.y * wallDamping;
+	if(Pnew.y >= maxB.y && Vnew.y > 0.0) Vnew.y = -Vnew.y * wallDamping;
+
+	if(Pnew.z <= minB.z && Vnew.z < 0.0) Vnew.z = -Vnew.z * wallDamping;
+	if(Pnew.z >= maxB.z && Vnew.z > 0.0) Vnew.z = -Vnew.z * wallDamping;
+
+	pos[idx] = vec4(clamp(Pnew, minB, maxB), 1.0);
+	vel[idx] = vec4(Vnew, 0.0);
+
+}
