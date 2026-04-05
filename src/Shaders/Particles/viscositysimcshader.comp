@@ -10,11 +10,16 @@ layout(std430, binding = 5) buffer ParticleCell { uint particleCell[]; };
 layout(std430, binding = 6) buffer SortedIndex { uint sortedIndexBuf[]; };
 layout(std430, binding = 7) buffer ParticleDensities { float densityBuf[]; };
 layout(std430, binding = 8) buffer ParticleViscosities { vec4 viscosityAccelBuf[]; };
+layout(std430, binding = 11) readonly buffer BoundaryCellCount { uint boundaryCountBuf[]; };
+layout(std430, binding = 12) readonly buffer BoundaryCellStart { uint boundaryStartBuf[]; };
+layout(std430, binding = 13) readonly buffer BoundarySortedIndex { uint boundarySortedIndexBuf[]; };
+layout(std430, binding = 15) readonly buffer BoundaryPos { vec4 boundaryGhostPart[]; };
 
 uniform uint particleCount;
 uniform uint gridResX;
 uniform uint gridResY;
 uniform uint gridResZ;
+uniform uint boundaryCount;
 
 uniform float h;
 uniform float mass;
@@ -90,6 +95,32 @@ void main() {
 		}
 
 	}
+//	float rhoi = max(densityBuf[idx], 1e-6);
+//	for(int dz = -1; dz <= 1; dz++) {
+//		for(int dy = -1; dy <= 1; dy++) {
+//			for(int dx = -1; dx <= 1; dx++) {
+//				ivec3 c = base + ivec3(dx, dy, dz);
+//				if(c.x < 0 || c.y < 0 || c.z < 0) continue;
+//				if(c.x >= int(gridResX) || c.y >= int(gridResY) || c.z >= int(gridResZ)) continue;
+//
+//				uint nCell = flatten(c);
+//				uint bStart = boundaryStartBuf[nCell];
+//				uint bCount = boundaryCountBuf[nCell];
+//
+//				for(uint i = 0u; i < bCount; i++) {
+//					uint bIdx = boundarySortedIndexBuf[bStart + i];
+//					vec3 Rb = Pi - boundaryGhostPart[bIdx].xyz;
+//					float rb = length(Rb);
+//					if(rb <= 1e-6 || rb >= h) continue;
+//
+//					float weight = boundaryGhostPart[bIdx].w;
+//					vec3 Vb = vec3(0.0);
+//					viscAccel += viscosityCoeff * weight * (Vb - Vi) / rhoi * laplacianVisc(rb, h);
+//				}
+//			}
+//		}
+//	}
+
 	viscosityAccelBuf[idx] = vec4(viscAccel, 0.0);
 
 }

@@ -61,6 +61,7 @@ bool firstMouse = true;
 bool planeViewMode = false;
 bool planeCamDetached = false;
 bool lightMode = false;
+bool showBoundaryGhosts = false;
 float autoYaw = 0.0f;
 
 glm::vec3 lightPos(1.0f, 1.0f, 3.0f);
@@ -179,7 +180,7 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
 		}
 	}
 
-	if ((key == GLFW_KEY_1 || key == GLFW_KEY_2 || key == GLFW_KEY_3) && action == GLFW_PRESS) {
+	if ((key == GLFW_KEY_1 || key == GLFW_KEY_2 || key == GLFW_KEY_3 || key == GLFW_KEY_4) && action == GLFW_PRESS) {
 		if (state) {
 			if (key == GLFW_KEY_1) {
 				state->particleSystem->SetSpawnMode(ParticleSystem::SpawnMode::Random, true);
@@ -189,14 +190,24 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
 				state->particleSystem->SetSpawnMode(ParticleSystem::SpawnMode::SingleDam, true);
 				std::cout << "Spawn mode: SingleDam" << std::endl;
 			}
-			else {
+			else if (key == GLFW_KEY_3) {
 				state->particleSystem->SetSpawnMode(ParticleSystem::SpawnMode::DoubleDam, true);
 				std::cout << "Spawn mode: DoubleDam" << std::endl;
+			}
+			else if (key == GLFW_KEY_4) {
+				state->particleSystem->SetSpawnMode(ParticleSystem::SpawnMode::SingleSheet, true);
+				std::cout << "Spawn Mode: SingleSheet" << std::endl;
+
 			}
 		}
 		else {
 			std::cout << "Particle System cast error in Key Callback" << std::endl;
 		}
+	}
+
+	if (key == GLFW_KEY_G && action == GLFW_PRESS) {
+		showBoundaryGhosts = !showBoundaryGhosts;
+		std::cout << "Boundary ghosts: " << (showBoundaryGhosts ? "ON" : "OFF") << std::endl;
 	}
 
 }
@@ -662,11 +673,16 @@ int main(int argc, char* argv[]) {
 		//Particle System
 		float particleRadius = 12.0f;
 		float wallDamping = 0.3f;
-		bool enableSPH = false;
+		bool enableSPH = true;
 		particleSystem.Update(deltaTime, wallDamping, enableSPH);
 		glm::mat4 particleMVP = perspectiveProjection * view * glm::mat4(1.0f);
 		glm::vec3 particleColor(0.2f, 0.0f, 1.0f);
 		particleSystem.Render(particleMVP, particleColor, particleRadius, glm::vec2(framebufferWidth, framebufferHeight), perspectiveProjection, view, lightPosWorld);
+
+		if (showBoundaryGhosts) {
+			//render boundary ghost particles
+			particleSystem.RenderBoundary(particleMVP, glm::vec3(0.7f, 0.0f, 1.0f), 4.0f);
+		}
 
 		//plane
 		quadShader.use();

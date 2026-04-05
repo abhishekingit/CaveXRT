@@ -1,0 +1,22 @@
+#version 430 core
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(std430, binding = 3) buffer CellOffset { uint cellOffsetBuf[]; };
+layout(std430, binding = 15) buffer BlockSums { uint blockSums[]; };
+
+uniform uint elementCount;
+
+void main() {
+	uint gid = gl_WorkGroupID.x;
+	uint lid = gl_LocalInvocationID.x;
+	uint base = gid * 512u;
+
+	uint i0 = base + lid;
+	uint i1 = base + lid + 256u;
+	uint addVal = blockSums[gid];
+
+	if(i0 < elementCount) cellOffsetBuf[i0] += addVal;
+	if(i1 < elementCount) cellOffsetBuf[i1] += addVal;
+
+}

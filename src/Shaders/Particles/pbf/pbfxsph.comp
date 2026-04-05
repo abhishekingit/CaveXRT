@@ -65,7 +65,7 @@ void main() {
 					if (r >= h) continue;
 					vec3 vj = vel[j].xyz;
 
-					float Rhoj = max(densityBuf[j], restDensity * 0.1);
+					float Rhoj = max(densityBuf[j], restDensity);
 					deltaV += (mass / Rhoj) * (vj - vi) * W_Poly6(r, h);
 				}
 			}
