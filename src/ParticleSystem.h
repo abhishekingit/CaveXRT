@@ -27,6 +27,7 @@ public:
 	void Update(float deltaTime, float wallDamping, bool enableSPH);
 	void Render(const glm::mat4& mvp, const glm::vec3& particleColor, float pointSize, const glm::vec2& viewportSize, const glm::mat4& projection, const glm::mat4& view, const glm::vec3& lightWorldPos);
 	void RenderBoundary(const glm::mat4& mvp, const glm::vec3& color, float pointSize);
+	
 
 	void ResetParticles();
 	void SetSpawnMode(SpawnMode mode, bool reinitialize = true);
@@ -53,7 +54,7 @@ private:
 	float stiffness;
 
 	uint32_t pbfSolverIterations = 2;
-	float pbfScorrK = 0.0f;
+	float pbfScorrK = 0.0005f;
 	float pbfScorrN = 4.0f;
 	float pbfEpsilon = 1e-5f;
 	float pbfScorrDQ = 0.1f;
@@ -110,6 +111,9 @@ private:
 	CaveCompute* viscosityComputeProgram = nullptr;
 	//pressure compute
 	CaveCompute* pressureComputeProgram = nullptr;
+	CaveCompute* sphVorticityComputeProgram = nullptr;
+	CaveCompute* sphVorticityApplyComputeProgram = nullptr;
+
 
 	//pbf compute programs
 	CaveCompute* pbfPredictPosComputeProgram = nullptr;
@@ -135,4 +139,6 @@ private:
 	void InitializeBoundaryGhostParticles();
 	void BuildUniformGrid();
 	void InitializeParticles();
+	float ComputeCFLTimeStep(float dtMin, float dtMax);
+
 };

@@ -1,0 +1,85 @@
+#version 430 core
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(std430, binding = 0) buffer Particles { vec4 pos[]; };
+layout(std430, binding = 1) buffer Velocities { vec4 vel[]; };
+layout(std430, binding = 2) buffer CellCount { uint countBuf[]; };
+layout(std430, binding = 3) buffer CellWrite { uint cellWriteBuf[]; };
+layout(std430, binding = 5) buffer ParticleCell { uint particleCell[]; };
+layout(std430, binding = 6) buffer SortedIndex { uint sortedIndexBuf[]; };
+layout(std430, binding = 7) buffer ParticleDensities { float densityBuf[]; };
+layout(std430, binding = 14) buffer ParticleVorticities { vec4 vorticityBuf[]; };
+
+uniform uint particleCount;
+uniform uint gridResX;
+uniform uint gridResY;
+uniform uint gridResZ;
+
+uniform float h;
+uniform float mass;
+uniform float PI;
+uniform float deltaTime;
+uniform float vorticityEpsilon;
+
+uint flatten(uvec3 c) {
+    return c.x + gridResX * (c.y + gridResY * c.z);
+}
+
+vec3 gradW_spiky(vec3 rij, float r, float hVal) {
+    if (r <= 1e-6 || r >= hVal) return vec3(0.0);
+    float coeff = -45.0 / (PI * pow(hVal, 6.0));
+    float a = (hVal - r);
+    return coeff * a * a * (rij / r);
+}
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= particleCount) return;
+
+    vec3 Pi = pos[idx].xyz;
+    vec3 Omegai = vorticityBuf[idx].xyz;
+
+    uint cellId = particleCell[idx];
+    ivec3 base = ivec3(
+        int(cellId % gridResX),
+        int((cellId / gridResX) % gridResY),
+        int(cellId / (gridResX * gridResY))
+    );
+
+    vec3 eta = vec3(0.0);
+
+    for (int dz = -1; dz <= 1; dz++) {
+        for (int dy = -1; dy <= 1; dy++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                ivec3 c = base + ivec3(dx, dy, dz);
+                if (c.x < 0 || c.y < 0 || c.z < 0) continue;
+                if (c.x >= int(gridResX) || c.y >= int(gridResY) || c.z >= int(gridResZ)) continue;
+
+                uint nCell = flatten(uvec3(c));
+                uint start = cellWriteBuf[nCell];
+                uint count = countBuf[nCell];
+
+                for (uint i = 0u; i < count; i++) {
+                    uint j = sortedIndexBuf[start + i];
+                    if (j == idx) continue;
+
+                    vec3 Rij = Pi - pos[j].xyz;
+                    float r = length(Rij);
+                    if (r >= h) continue;
+
+                    float rhoj = max(densityBuf[j], 1e-6);
+                    float omegaMagJ = length(vorticityBuf[j].xyz);
+                    vec3 gradW = gradW_spiky(Rij, r, h);
+
+                    eta += (mass / rhoj) * omegaMagJ * gradW;
+                }
+            }
+        }
+    }
+
+    float etaLen = length(eta);
+    vec3 N = (etaLen > 1e-6) ? (eta / etaLen) : vec3(0.0);
+    vec3 fVort = vorticityEpsilon * cross(N, Omegai);
+    vel[idx].xyz += deltaTime * fVort;
+}

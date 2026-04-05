@@ -67,7 +67,7 @@ void main() {
 
 				for(uint i = 0u; i < count; i++) {
 					uint j = sortedIndexBuf[start + i];
-					if(j == idx) continue;
+					//if(j == idx) continue;
 					float r = length(p - pos[j].xyz);
 					if(r < h) {
 						rho += mass * W_cubic(r, h);
@@ -104,6 +104,6 @@ void main() {
 			}
 		}
 	}
-	densityBuf[idx] = max(rho, restDensity); 
+	densityBuf[idx] = rho; 
 
 }

@@ -74,7 +74,7 @@ float specularIntensity = 1.0;
 float glossiness = 128;
 
 glm::vec3 bboxMin(-1.5f, 0.0f, -0.7f);
-glm::vec3 bboxMax(1.5f, 4.0f, 0.7f);
+glm::vec3 bboxMax(1.9f, 4.0f, 0.7f);
 float simparticleRadius = 0.017f;
 
 float bboxVerts[] = {

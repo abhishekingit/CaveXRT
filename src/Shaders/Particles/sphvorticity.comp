@@ -2,13 +2,13 @@
 
 layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
 
-layout(std430, binding = 0) readonly buffer Particles { vec4 pos[]; };
+layout(std430, binding = 0) buffer Particles { vec4 pos[]; };
 layout(std430, binding = 1) buffer Velocities { vec4 vel[]; };
-layout(std430, binding = 2) readonly buffer CellCount { uint countBuf[]; };
-layout(std430, binding = 3) readonly buffer CellOffset { uint cellOffsetBuf[]; };
-layout(std430, binding = 5) readonly buffer ParticleCell { uint particleCell[]; };
-layout(std430, binding = 6) readonly buffer SortedIndex { uint sortedIndexBuf[]; };
-layout(std430, binding = 7) readonly buffer ParticleDensities { float densityBuf[]; };
+layout(std430, binding = 2) buffer CellCount { uint countBuf[]; };
+layout(std430, binding = 3) buffer CellWrite { uint cellWriteBuf[]; };
+layout(std430, binding = 5) buffer ParticleCell { uint particleCell[]; };
+layout(std430, binding = 6) buffer SortedIndex { uint sortedIndexBuf[]; };
+layout(std430, binding = 7) buffer ParticleDensities { float densityBuf[]; };
 layout(std430, binding = 14) buffer ParticleVorticities  { vec4 vorticityBuf[]; };
 
 uniform uint particleCount;
@@ -18,8 +18,6 @@ uniform uint gridResZ;
 uniform float h;
 uniform float mass;
 uniform float PI;
-uniform float deltaTime;
-uniform float vorticityEpsilon;
 
 uint flatten(uvec3 c) {
 	return c.x + gridResX * (c.y + gridResY * c.z);
@@ -37,12 +35,11 @@ void main() {
 	if(idx >= particleCount) return;
 
 	vec3 Pi = pos[idx].xyz;
-	vec3 Omegai = vorticityBuf[idx].xyz;
+	vec3 Vi = vel[idx].xyz;
 	uint cellId = particleCell[idx];
 	ivec3 base = ivec3(int(cellId % gridResX), int((cellId / (gridResX) % gridResY)), int(cellId / (gridResX * gridResY)));
 
-	vec3 gradOmega = vec3(0.0);
-
+	vec3 omega = vec3(0.0);
 	for(int dz = -1; dz <= 1; dz++) {
 		for(int dy = -1; dy <= 1; dy++) {
 			for(int dx = -1; dx <= 1; dx++) {
@@ -50,37 +47,33 @@ void main() {
 				if(c.x < 0 || c.y < 0 || c.z < 0) continue;
 				if(c.x >= int(gridResX) || c.y >= int(gridResY) || c.z >= int(gridResZ)) continue;
 				uint nCell = flatten(uvec3(c));
-				uint start = cellOffsetBuf[nCell];
+				uint start = cellWriteBuf[nCell];
 				uint count = countBuf[nCell];
-
 				for(uint i = 0u; i < count; i++) {
 					uint j = sortedIndexBuf[start + i];
 					if(j == idx) continue;
-
-					vec3 Pij = Pi - pos[j].xyz;
-					float r = length(Pij);
+					vec3 Rij = Pi - pos[j].xyz;
+					float r = length(Rij);
 					if(r >= h) continue;
-					//needs extra mass / rhoj term
-					float rhoj = max(densityBuf[j], 1e-6);
-					float Omegaj = length(vorticityBuf[j].xyz);
-					gradOmega += (mass / rhoj) * Omegaj * gradW_spiky(Pij, r, h);
+
+					float Rhoj = max(densityBuf[j], 1e-6);
+					vec3 gradW = gradW_spiky(Rij, r, h);
+					omega += (mass / Rhoj) * cross(vel[j].xyz - Vi, gradW);
 
 
 
 				}
 
 
-
 			}
+
 
 
 		}
 
 
 	}
-	float lenN = length(gradOmega);
-	vec3 N = (lenN > 1e-6) ? (gradOmega / lenN) : vec3(0.0);
-	vec3 fVort = vorticityEpsilon * cross(N, Omegai);
-	vec3 V = vel[idx].xyz + deltaTime * fVort;
-	vel[idx] = vec4(V, 0.0);
+	vorticityBuf[idx] = vec4(omega, 0.0);
+
+
 }
