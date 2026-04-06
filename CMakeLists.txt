@@ -33,6 +33,8 @@ src/CaveCompute.h
 src/CaveCompute.cpp 
 src/ParticleSystem.h
 src/ParticleSystem.cpp
+src/FluidRenderTarget.h
+src/FluidRenderTarget.cpp
 ${IMGUI_DIR}/imgui.cpp
 ${IMGUI_DIR}/imgui_draw.cpp
 ${IMGUI_DIR}/imgui_tables.cpp

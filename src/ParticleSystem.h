@@ -28,6 +28,9 @@ public:
 	void Render(const glm::mat4& mvp, const glm::vec3& particleColor, float pointSize, const glm::vec2& viewportSize, const glm::mat4& projection, const glm::mat4& view, const glm::vec3& lightWorldPos);
 	void RenderBoundary(const glm::mat4& mvp, const glm::vec3& color, float pointSize);
 	
+	//fluid surface rendering
+	void RenderFluidDepth(const glm::mat4& mvp, float pointSize, const glm::vec2& viewportSize, const glm::mat4& projection, const glm::mat4& view);
+	void RenderFluidThickness(const glm::mat4& mvp, float pointSize, const glm::vec2& viewportSize, const glm::mat4& projection, const glm::mat4& view);
 
 	void ResetParticles();
 	void SetSpawnMode(SpawnMode mode, bool reinitialize = true);
@@ -123,9 +126,12 @@ private:
 
 	const uint32_t workGroupSize = 256;
 
-
+	//render shaders
 	Shader* renderShader = nullptr;	
 	Shader* boundaryRenderShader = nullptr;
+	Shader* fluidDepthShader = nullptr;
+	Shader* fluidThicknessShader = nullptr;
+
 	CaveCompute* gridClearProgram = nullptr;
 	CaveCompute* gridParticleCountProgram = nullptr;
 	CaveCompute* gridParticleReorderProgram = nullptr;

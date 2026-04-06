@@ -16,6 +16,7 @@
 #include "CaveXRTConfig.h"
 #include "RenderTarget.h"
 #include "ParticleSystem.h"
+#include "FluidRenderTarget.h"
 
 
 
@@ -119,6 +120,7 @@ struct RenderState {
 	Shader* quadShader{};
 	CaveXRTConfig* config{};
 	RenderTarget* renderTarget{};
+	FluidRenderTarget* fluidRenderTarget{};
 	int* framebufferWidth{};
 	int* framebufferHeight{};
 	ParticleSystem* particleSystem{};
@@ -331,6 +333,10 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
 		state->renderTarget->Resize(width, height);
 	}
 
+	if (state->fluidRenderTarget) {
+		state->fluidRenderTarget->Resize(width, height);
+	}
+
 	if (state->framebufferWidth) {
 		*state->framebufferWidth = width;
 	}
@@ -416,6 +422,8 @@ int main(int argc, char* argv[]) {
 	Shader quadShader("../../../src/Shaders/quadVshader.vert", "../../../src/Shaders/quadFshader.frag");
 	Shader skyboxShader("../../../src/Shaders/skyboxvshader.vert", "../../../src/Shaders/skyboxfshader.frag");
 	Shader bboxShader("../../../src/Shaders/bboxvshader.vert", "../../../src/Shaders/bboxfshader.frag");
+	Shader fluidRenderShader("../../../src/Shaders/Particles/fluidRender/fluidCompositev.vert", "../../../src/Shaders/Particles/fluidRender/fluidCompositef.frag");
+	Shader fluidRenderShader("../../../src/Shaders/Particles/fluidRender/fluidCompositev.vert", "../../../src/Shaders/Particles/fluidRender/fluidNarrowRangefilter.frag");
 
 	ParticleSystem particleSystem(
 		50000,
@@ -423,7 +431,7 @@ int main(int argc, char* argv[]) {
 		bboxMin,
 		bboxMax,
 		"../../../src/Shaders/Particles/particlecshader.comp",
-		"../../../src/Shaders/Particles/particlevshader.vert",
+		"../../../src/Shaders/Particles/fluidRender/particlevshader.vert",
 		"../../../src/Shaders/Particles/particlefshader.frag");
 
 	particleSystem.SetSpawnMode(ParticleSystem::SpawnMode::DoubleDam, true);
@@ -446,6 +454,20 @@ int main(int argc, char* argv[]) {
 	bool uiEnableSPH = true;
 	float uiParticleRenderSize = 12.0f;
 	float uiWallDamping = 0.5f;
+	bool uiEnableParticles = false;
+
+	//Narrow Range filter parameters
+	bool uiEnableNarrowRangeFilter = false;
+	int uiNRFilterRadius = 10;
+	float uiNRSigmaSpatial = 2.0f;
+	float uiNRSigmaRangeScale = 0.02f;
+	float uiNRSigmaRangeBase = 0.01f;
+	float uiNRThicknessEpsilon = 1e-6f;
+	float uiNRThresholdRatio = 0.75f;
+	float uiNRClampRatio = 1.0f;
+	int uiNRMinFilterRadius = 2;
+	float uiNRDepthAdaptiveScale = 0.15f;
+	float uiNRMinSigmaSpatial = 0.5f;
 	
 
 	int framebufferWidth = caveXRTConfig.width;
@@ -454,12 +476,52 @@ int main(int argc, char* argv[]) {
 
 	RenderTarget reflectionRenderTarget(framebufferWidth, framebufferHeight);
 
+	FluidRenderTarget fluidRenderTarget(framebufferWidth, framebufferHeight);
+	
+	uint32_t nrFBO[2]{ 0, 0 };
+	uint32_t nrTex[2]{ 0, 0 };
+
+	int nrWidth = framebufferWidth;
+	int nrHeight = framebufferHeight;
+
+	auto CreateNarrowRangeRenderTargets = [&](int w, int h) {
+		if (nrTex[0] != 0) glDeleteTextures(2, nrTex);
+		if (nrFBO[0] != 0) glDeleteFramebuffers(2, nrFBO);
+
+		glGenTextures(2, nrTex);
+		glGenFramebuffers(2, nrFBO);
+
+		for (int i = 0; i < 2; i++) {
+			glBindTexture(GL_TEXTURE_2D, nrTex[i]);
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_R32F, w, h, 0, GL_RED, GL_FLOAT, nullptr);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+			glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+			glBindFramebuffer(GL_FRAMEBUFFER, nrFBO[i]);
+			glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, nrTex[i], 0);
+		}
+
+		glBindFramebuffer(GL_FRAMEBUFFER, 0);
+		glBindTexture(GL_TEXTURE_2D, 0);
+
+		nrWidth = w;
+		nrHeight = h;
+
+
+	};
+
+	CreateNarrowRangeRenderTargets(framebufferWidth, framebufferHeight);
+
+
 	RenderState state{
 		.mainShader = &shaderprog1,
 		.lightShader = &shaderprog2,
 		.quadShader = &quadShader,
 		.config = &caveXRTConfig,
 		.renderTarget = &renderTarget,
+		.fluidRenderTarget = &fluidRenderTarget,
 		.framebufferWidth = &framebufferWidth,
 		.framebufferHeight = &framebufferHeight,
 		.particleSystem = &particleSystem
@@ -746,6 +808,7 @@ int main(int argc, char* argv[]) {
 		ImGui::Begin("Simulation controls", nullptr, ImGuiWindowFlags_NoCollapse);
 
 		ImGui::Checkbox("Enable SPH", &uiEnableSPH);
+		ImGui::Checkbox("Show Particles", &uiEnableParticles);
 		ImGui::SliderFloat("Particle render size", &uiParticleRenderSize, 1.0f, 30.0f);
 		ImGui::SliderFloat("Wall Damping", &uiWallDamping, 0.0f, 1.0f);
 		if (ImGui::DragFloat3("Gravity", &uiGravity.x, 0.05f, -30.0f, 30.0f, "%.2f")) {
@@ -849,8 +912,7 @@ int main(int argc, char* argv[]) {
 		bool enableSPH = uiEnableSPH;
 		particleSystem.Update(deltaTime, wallDamping, enableSPH);
 		glm::mat4 particleMVP = perspectiveProjection * view * glm::mat4(1.0f);
-		glm::vec3 particleColor(0.2f, 0.0f, 1.0f);
-		particleSystem.Render(particleMVP, particleColor, particleRadius, glm::vec2(framebufferWidth, framebufferHeight), perspectiveProjection, view, lightPosWorld);
+
 
 		if (showBoundaryGhosts) {
 			//render boundary ghost particles
@@ -908,6 +970,69 @@ int main(int argc, char* argv[]) {
 		cubeModel.Draw(skyboxShader);
 		glDepthFunc(GL_LESS);
 		glDepthMask(GL_TRUE);
+
+		//Fluid Rendering 
+
+		if (uiEnableParticles) {
+			//Particle rendering
+			glm::vec3 particleColor(0.2f, 0.0f, 1.0f);
+			particleSystem.Render(particleMVP, particleColor, particleRadius, glm::vec2(framebufferWidth, framebufferHeight), perspectiveProjection, view, lightPosWorld);
+		}
+		else {
+			//Fluid surface Rendering 
+			fluidRenderTarget.Bind();
+			glViewport(0, 0, fluidRenderTarget.Width(), fluidRenderTarget.Height());
+
+			//DepthPass for Fluid surface rendering
+			glDrawBuffer(GL_COLOR_ATTACHMENT0);
+			const float clearDepthVal = 0.0f;
+			glClearBufferfv(GL_COLOR, 0, &clearDepthVal);
+			glClear(GL_DEPTH_BUFFER_BIT);
+			glEnable(GL_DEPTH_TEST);
+			glDepthMask(GL_TRUE);
+			glDisable(GL_BLEND);
+			particleSystem.RenderFluidDepth(particleMVP, particleRadius, glm::vec2(framebufferWidth, framebufferHeight), perspectiveProjection, view);
+
+			//ThicknessPass for Fluid surface rendering
+			glDrawBuffer(GL_COLOR_ATTACHMENT1);
+			const float clearThicknessVal = 0.0f;
+			glClearBufferfv(GL_COLOR, 1, &clearThicknessVal);
+			glEnable(GL_BLEND);
+			glBlendFunc(GL_ONE, GL_ONE);
+
+			glDisable(GL_DEPTH_TEST);
+
+			glDepthMask(GL_FALSE);
+			particleSystem.RenderFluidThickness(particleMVP, particleRadius, glm::vec2(framebufferWidth, framebufferHeight), perspectiveProjection, view);
+			glDepthMask(GL_TRUE);
+			glDisable(GL_BLEND);
+
+			glEnable(GL_DEPTH_TEST);
+
+			fluidRenderTarget.UnBind();
+			glViewport(0, 0, framebufferWidth, framebufferHeight);
+			glEnable(GL_BLEND);
+			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+			glDisable(GL_DEPTH_TEST);
+
+			fluidRenderShader.use();
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, fluidRenderTarget.GetDepthTexture());
+			fluidRenderShader.setInt("fluidDepthTexture", 0);
+
+			glActiveTexture(GL_TEXTURE1);
+			glBindTexture(GL_TEXTURE_2D, fluidRenderTarget.GetFluidThicknessTexture());
+			fluidRenderShader.setInt("fluidThicknessTexture", 1);
+
+			glBindVertexArray(quadVAO);
+			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
+			glBindVertexArray(0);
+
+			glDisable(GL_BLEND);
+			glEnable(GL_DEPTH_TEST);
+		}
+
+		
 
 		/*shaderprog2.use();
 		glm::mat4 lightModel = glm::mat4(1.0f);

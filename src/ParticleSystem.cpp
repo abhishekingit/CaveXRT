@@ -11,6 +11,8 @@ ParticleSystem::ParticleSystem(size_t maxParticles, float simRadius, const glm::
 	computeProgram = new CaveCompute(computeShaderPath);
 	renderShader = new Shader(vertexShaderPath, fragmentShaderPath);
 	boundaryRenderShader = new Shader("../../../src/Shaders/Particles/boundaryvshader.vert", "../../../src/Shaders/Particles/boundaryfshader.frag");
+	fluidDepthShader = new Shader("../../../src/Shaders/Particles/fluidRender/particlevshader.vert", "../../../src/Shaders/Particles/fluidRender/fluidDepthpass.frag");
+	fluidThicknessShader = new Shader("../../../src/Shaders/Particles/fluidRender/particlevshader.vert", "../../../src/Shaders/Particles/fluidRender/fluidThicknesspass.frag");
 
 	gridClearProgram = new CaveCompute("../../../src/Shaders/Particles/gridclear.comp");
 	gridParticleCountProgram = new CaveCompute("../../../src/Shaders/Particles/gridparticlecount.comp");
@@ -208,6 +210,16 @@ ParticleSystem::~ParticleSystem() {
 	if (boundaryRenderShader) {
 		delete boundaryRenderShader;
 		boundaryRenderShader = nullptr;
+	}
+
+	if (fluidDepthShader) {
+		delete fluidDepthShader;
+		fluidDepthShader = nullptr;
+	}
+
+	if (fluidThicknessShader) {
+		delete fluidThicknessShader;
+		fluidThicknessShader = nullptr;
 	}
 }
 
@@ -1008,6 +1020,35 @@ void ParticleSystem::RenderBoundary(const glm::mat4& mvp, const glm::vec3& color
 	glBindVertexArray(vao);
 	glDrawArrays(GL_POINTS, 0, boundaryCount);
 	glBindVertexArray(0);
+}
+
+void ParticleSystem::RenderFluidDepth(const glm::mat4& mvp, float pointSize, const glm::vec2& viewportSize, const glm::mat4& projection, const glm::mat4& view) {
+	if (!fluidDepthShader) return;
+	
+	glBindVertexArray(vao);
+	fluidDepthShader->use();
+	fluidDepthShader->setMat4("mvp", mvp);
+	fluidDepthShader->setMat4("projection", projection);
+	fluidDepthShader->setMat4("view", view);
+	fluidDepthShader->setVec2("viewportSize", viewportSize);
+	fluidDepthShader->setFloat("pointSize", pointSize);
+	glDrawArrays(GL_POINTS, 0, maxParticles);
+	glBindVertexArray(0);
+}
+
+void ParticleSystem::RenderFluidThickness(const glm::mat4& mvp, float pointSize, const glm::vec2& viewportSize, const glm::mat4& projection, const glm::mat4& view) {
+	if (!fluidThicknessShader) return;
+
+	glBindVertexArray(vao);
+	fluidThicknessShader->use();
+	fluidThicknessShader->setMat4("mvp", mvp);
+	fluidThicknessShader->setMat4("projection", projection);
+	fluidThicknessShader->setMat4("view", view);
+	fluidThicknessShader->setVec2("viewportSize", viewportSize);
+	fluidThicknessShader->setFloat("pointSize", pointSize);
+	glDrawArrays(GL_POINTS, 0, maxParticles);
+	glBindVertexArray(0);
+
 }
 
 void ParticleSystem::SetBounds(const glm::vec3& gridMin, const glm::vec3& gridMax, bool rebuild, bool reintializeParticles) {
