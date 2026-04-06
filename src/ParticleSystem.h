@@ -33,6 +33,37 @@ public:
 	void SetSpawnMode(SpawnMode mode, bool reinitialize = true);
 	SpawnMode GetSpawnMode() const { return spawnMode; }
 
+	void SetBounds(const glm::vec3& gridMin, const glm::vec3& gridMax, bool rebuild = true, bool reinitializeParticles = true);
+
+	void SetRestDensity(float restDensity) { this->restDensity = restDensity; }
+	void SetViscosityCoeff(float viscosityCoeff) { this->viscosityCoeff = viscosityCoeff; }
+	void SetStiffness(float stiffness) { this->stiffness = stiffness; }
+	void SetGravity(const glm::vec3& gravity) { this->GRAVITY = gravity; }
+	void SetVorticityEpsilon(float epsilon) { this->vorticityEpsilon = epsilon; }
+	void SetPBFSolverIterations(uint32_t iterations) { this->pbfSolverIterations = iterations; }
+	void SetPBFRelaxation(float relaxation) { this->pbfRelaxation = relaxation; }
+	void SetPBFCorrK(float k) { this->pbfScorrK = k; }
+	void SetPBFCorrN(float n) { this->pbfScorrN = n; }
+	void SetPBFCorrDQ(float dq) { this->pbfScorrDQ = dq; }
+	void SetPBFEpsilon(float epsilon) { this->pbfEpsilon = epsilon; }
+
+	float GetRestDensity() const { return restDensity; }
+	float GetViscosityCoeff() const { return viscosityCoeff; }
+	float GetStiffness() const { return stiffness; }
+	glm::vec3 GetGravity() const { return GRAVITY; }
+	float GetVorticityEpsilon() const { return vorticityEpsilon; }
+	uint32_t GetPBFSolverIterations() const { return pbfSolverIterations;  }
+	float GetPBFRelaxation() const { return pbfRelaxation; }
+	float GetPBFCorrK() const { return pbfScorrK; }
+	float GetPBFCorrN() const{ return pbfScorrN; }
+	float GetPBFCorrDQ() const{ return pbfScorrDQ; }
+	float GetPBFEpsilon() const{ return pbfEpsilon; }
+
+	glm::vec3 GetGridMin() const { return GRID_MIN; }
+	glm::vec3 GetGridMax() const { return GRID_MAX; }
+
+
+
 private:
 	size_t maxParticles;
 	std::vector<Particle> particles;
@@ -139,6 +170,6 @@ private:
 	void InitializeBoundaryGhostParticles();
 	void BuildUniformGrid();
 	void InitializeParticles();
-	float ComputeCFLTimeStep(float dtMin, float dtMax);
+	//float ComputeCFLTimeStep(float dtMin, float dtMax);
 
 };

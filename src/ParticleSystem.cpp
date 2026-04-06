@@ -716,7 +716,14 @@ void ParticleSystem::Update(float deltaTime, float wallDamping, bool enableSPH) 
 	//density pass SPH
 
 	if (enableSPH) {
-		//build uniform grid
+		//for toggling
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssboPos);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssboVel);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 7, ssboDensity);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 8, ssboViscosityAccel);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 9, ssboPressure);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 10, ssboPressureAccel);
+
 		BuildUniformGrid();
 		//for boundary using same binding
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 15, ssboBoundaryGhostParticles);
@@ -790,6 +797,7 @@ void ParticleSystem::Update(float deltaTime, float wallDamping, bool enableSPH) 
 		sphVorticityApplyComputeProgram->setFloat("h", h);
 		sphVorticityApplyComputeProgram->setFloat("mass", mass);
 		sphVorticityApplyComputeProgram->setFloat("PI", this->PI);
+		sphVorticityApplyComputeProgram->setFloat("deltaTime", dt);
 		sphVorticityApplyComputeProgram->setFloat("vorticityEpsilon", this->vorticityEpsilon);
 		sphVorticityApplyComputeProgram->dispatch(groups, 1, 1);
 		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
@@ -819,6 +827,10 @@ void ParticleSystem::Update(float deltaTime, float wallDamping, bool enableSPH) 
 			const float dtSub = dt / float(substeps);
 
 			//glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 8, ssboViscosityAccel);
+			//for toggling
+			glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 11, ssboPredPos);
+			glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 8, ssboViscosityAccel);
+
 			uint32_t pbfIter = 0;
 			if (!pbfPredictPosComputeProgram) return;
 			pbfPredictPosComputeProgram->use();
@@ -996,6 +1008,26 @@ void ParticleSystem::RenderBoundary(const glm::mat4& mvp, const glm::vec3& color
 	glBindVertexArray(vao);
 	glDrawArrays(GL_POINTS, 0, boundaryCount);
 	glBindVertexArray(0);
+}
+
+void ParticleSystem::SetBounds(const glm::vec3& gridMin, const glm::vec3& gridMax, bool rebuild, bool reintializeParticles) {
+	const glm::vec3 eps(0.001f);
+
+	glm::vec3 newMin = glm::min(gridMin, gridMax - eps);
+	glm::vec3 newMax = glm::max(gridMax, newMin + eps);
+
+
+	GRID_MIN = newMin;
+	GRID_MAX = newMax;
+
+	if (rebuild) {
+		InitializeGrid();
+		InitializeBoundaryGhostParticles();
+	}
+
+	if (reintializeParticles) {
+		InitializeParticles();
+	}
 }
 
 void ParticleSystem::ResetParticles() {

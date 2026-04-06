@@ -13,3 +13,6 @@
 [submodule "GL/json"]
 	path = GL/json
 	url = https://github.com/nlohmann/json.git
+[submodule "GL/imgui"]
+	path = GL/imgui
+	url = https://github.com/ocornut/imgui.git

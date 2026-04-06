@@ -4,6 +4,9 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include "imgui.h"
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_opengl3.h"
 
 #define GLM_ENABLE_EXPERIMENTAL
 
@@ -129,8 +132,15 @@ struct AppConfig {
 
 void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
 	auto* state = static_cast<RenderState*>(glfwGetWindowUserPointer(window));
+	ImGui_ImplGlfw_KeyCallback(window, key, scancode, action, mods);
 	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS)
 		glfwSetWindowShouldClose(window, true);
+
+	const ImGuiIO& io = ImGui::GetIO();
+	if (io.WantCaptureKeyboard) {
+		return;
+	}
+
 	if (key == GLFW_KEY_F6 && action == GLFW_PRESS) {
 		//recompile shaders
 		if (state) {
@@ -210,9 +220,17 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
 		std::cout << "Boundary ghosts: " << (showBoundaryGhosts ? "ON" : "OFF") << std::endl;
 	}
 
+	
+
 }
 
 void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
+	ImGui_ImplGlfw_MouseButtonCallback(window, button, action, mods);
+	const ImGuiIO& io = ImGui::GetIO();
+	if (io.WantCaptureMouse) {
+		return;
+	}
+
 	if (button == GLFW_MOUSE_BUTTON_LEFT)
 		leftMousePressed = (action == GLFW_PRESS);
 	if (button == GLFW_MOUSE_BUTTON_RIGHT)
@@ -220,6 +238,13 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
 }
 
 void cursorPosCallback(GLFWwindow* window, double xpos, double ypos) {
+	const ImGuiIO& io = ImGui::GetIO();
+	if (io.WantCaptureMouse){
+		lastX = xpos;
+		lastY = ypos;
+		return;
+	}
+
 	if (firstMouse) {
 		lastX = xpos;
 		lastY = ypos;
@@ -283,6 +308,14 @@ void cursorPosCallback(GLFWwindow* window, double xpos, double ypos) {
 
 	glm::vec3 front;*/
 	
+}
+
+void scrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
+	ImGui_ImplGlfw_ScrollCallback(window, xoffset, yoffset);
+}
+
+void charCallback(GLFWwindow* window, unsigned int c) {
+	ImGui_ImplGlfw_CharCallback(window, c);
 }
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
@@ -367,6 +400,15 @@ int main(int argc, char* argv[]) {
 		return -1;
 	}
 
+	//imgui setup
+	IMGUI_CHECKVERSION();
+	ImGui::CreateContext();
+	ImGuiIO& io = ImGui::GetIO(); (void)io;
+	ImGui::StyleColorsDark();
+
+	ImGui_ImplGlfw_InitForOpenGL(window, false);
+	ImGui_ImplOpenGL3_Init("#version 430");
+
 	glEnable(GL_PROGRAM_POINT_SIZE);
 
 	Shader shaderprog1("../../../src/Shaders/vshader.vert", "../../../src/Shaders/fshader.frag");
@@ -386,6 +428,24 @@ int main(int argc, char* argv[]) {
 
 	particleSystem.SetSpawnMode(ParticleSystem::SpawnMode::DoubleDam, true);
 
+	glm::vec3 uiBoxMin = particleSystem.GetGridMin();
+	glm::vec3 uiBoxMax = particleSystem.GetGridMax();
+
+	float uiRestDensity = particleSystem.GetRestDensity();
+	float uiViscosity = particleSystem.GetViscosityCoeff();
+	float uiStiffness = particleSystem.GetStiffness();
+	float uiVorticityEpsilon = particleSystem.GetVorticityEpsilon();
+	int uiPbfSolverIterations = particleSystem.GetPBFSolverIterations();
+	float uiPbfRelaxation = particleSystem.GetPBFRelaxation();
+	float uiPbfScorrK = particleSystem.GetPBFCorrK();
+	float uiPbfScorrN = particleSystem.GetPBFCorrN();
+	float uiPbfScorrDQ = particleSystem.GetPBFCorrDQ();
+	float uiPbfEpsilon = particleSystem.GetPBFEpsilon();
+	glm::vec3 uiGravity = particleSystem.GetGravity();
+
+	bool uiEnableSPH = true;
+	float uiParticleRenderSize = 12.0f;
+	float uiWallDamping = 0.5f;
 	
 
 	int framebufferWidth = caveXRTConfig.width;
@@ -466,6 +526,8 @@ int main(int argc, char* argv[]) {
 
 	glfwSetMouseButtonCallback(window, mouseButtonCallback);
 	glfwSetCursorPosCallback(window, cursorPosCallback);
+	glfwSetScrollCallback(window, scrollCallback);
+	glfwSetCharCallback(window, charCallback);
 
 	glEnable(GL_DEPTH_TEST);
 	
@@ -662,6 +724,117 @@ int main(int argc, char* argv[]) {
 
 		//glViewport(0, 0, framebufferWidth, framebufferHeight);
 
+		//imgui 
+		ImGui_ImplOpenGL3_NewFrame();
+		ImGui_ImplGlfw_NewFrame();
+		ImGui::NewFrame();
+
+		const float panelWidth = framebufferWidth * 0.25f;
+		const float panelMargin = 20.0f;
+
+		ImGui::SetNextWindowPos(
+			ImVec2(static_cast<float>(framebufferWidth) - panelWidth - panelMargin, panelMargin),
+			ImGuiCond_Always
+		);
+
+		ImGui::SetNextWindowSize(
+			ImVec2(panelWidth, static_cast<float>(framebufferHeight) * 0.5f),
+			ImGuiCond_Always
+		);
+
+
+		ImGui::Begin("Simulation controls", nullptr, ImGuiWindowFlags_NoCollapse);
+
+		ImGui::Checkbox("Enable SPH", &uiEnableSPH);
+		ImGui::SliderFloat("Particle render size", &uiParticleRenderSize, 1.0f, 30.0f);
+		ImGui::SliderFloat("Wall Damping", &uiWallDamping, 0.0f, 1.0f);
+		if (ImGui::DragFloat3("Gravity", &uiGravity.x, 0.05f, -30.0f, 30.0f, "%.2f")) {
+			particleSystem.SetGravity(uiGravity);
+		}
+
+		if (ImGui::SliderFloat("Vorticity", &uiVorticityEpsilon, 0.0f, 100.0f)) {
+			particleSystem.SetVorticityEpsilon(uiVorticityEpsilon);
+		}
+
+		if (ImGui::SliderFloat("Viscosity", &uiViscosity, 0.0f, 5.0f)) {
+			particleSystem.SetViscosityCoeff(uiViscosity);
+		}
+
+		if (ImGui::SliderFloat("Rest Density", &uiRestDensity, 100.0f, 3000.0f)) {
+			particleSystem.SetRestDensity(uiRestDensity);
+		}
+
+		if (ImGui::CollapsingHeader("SPH Pressure", ImGuiTreeNodeFlags_DefaultOpen)) {
+
+			if (ImGui::SliderFloat("Stiffness", &uiStiffness, 0.0f, 100.0f)) {
+				particleSystem.SetStiffness(uiStiffness);
+			}			
+		}
+
+		if (ImGui::CollapsingHeader("PBF parameters", ImGuiTreeNodeFlags_DefaultOpen)) {
+			if (ImGui::DragFloat("SCorrK", &uiPbfScorrK, 0.00001f, 0.0f, 0.001f, "%.6f")) {
+				particleSystem.SetPBFCorrK(uiPbfScorrK);
+			}
+
+			if (ImGui::SliderFloat("SCorrN", &uiPbfScorrN, 0.0f, 10.0f)) {
+				particleSystem.SetPBFCorrN(uiPbfScorrN);
+			}
+
+			if (ImGui::SliderFloat("corrDQ", &uiPbfScorrDQ, 0.0f, 1.0f)) {
+				particleSystem.SetPBFCorrDQ(uiPbfScorrDQ);
+			}
+
+			if (ImGui::DragFloat("pbfEpsilon", &uiPbfEpsilon, 0.000001f, 0.0f, 0.01f, "%.7f")) {
+				particleSystem.SetPBFEpsilon(uiPbfEpsilon);
+			}
+
+			if (ImGui::SliderInt("Solver Iterations", &uiPbfSolverIterations, 0, 10)) {
+				particleSystem.SetPBFSolverIterations(uiPbfSolverIterations);
+			}			
+			
+		}
+
+		if (ImGui::CollapsingHeader("Bounds", ImGuiTreeNodeFlags_DefaultOpen)) {
+			ImGui::DragFloat3("Box min", &uiBoxMin.x, 0.01f);
+			ImGui::DragFloat3("Box max", &uiBoxMax.x, 0.01f);
+
+			if (ImGui::Button("Apply Bounds")) {
+				const glm::vec3 minGap(0.05f);
+
+				glm::vec3 safeMin = glm::min(uiBoxMin, uiBoxMax - minGap);
+				glm::vec3 safeMax = glm::max(uiBoxMax, safeMin + minGap);
+
+				uiBoxMin = safeMin;
+				uiBoxMax = safeMax;
+
+				bboxMin = safeMin;
+				bboxMax = safeMax;
+
+				particleSystem.SetBounds(safeMin, safeMax, true, true);
+
+				bboxVerts[0] = bboxMin.x; bboxVerts[1] = bboxMin.y; bboxVerts[2] = bboxMin.z;
+				bboxVerts[3] = bboxMax.x; bboxVerts[4] = bboxMin.y; bboxVerts[5] = bboxMin.z;
+				bboxVerts[6] = bboxMax.x; bboxVerts[7] = bboxMax.y; bboxVerts[8] = bboxMin.z;
+				bboxVerts[9] = bboxMin.x; bboxVerts[10] = bboxMax.y; bboxVerts[11] = bboxMin.z;
+				bboxVerts[12] = bboxMin.x; bboxVerts[13] = bboxMin.y; bboxVerts[14] = bboxMax.z;
+				bboxVerts[15] = bboxMax.x; bboxVerts[16] = bboxMin.y; bboxVerts[17] = bboxMax.z;
+				bboxVerts[18] = bboxMax.x; bboxVerts[19] = bboxMax.y; bboxVerts[20] = bboxMax.z;
+				bboxVerts[21] = bboxMin.x; bboxVerts[22] = bboxMax.y; bboxVerts[23] = bboxMax.z;
+
+				glBindBuffer(GL_ARRAY_BUFFER, bboxVBO);
+				glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(bboxVerts), bboxVerts);
+				glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+			}
+
+		}
+
+		if (ImGui::Button("Reset Particles")) {
+			particleSystem.ResetParticles();
+		}
+
+		ImGui::End();
+
 		//BBox
 		bboxShader.use();
 		bboxShader.setMat4("mvp", perspectiveProjection * view * glm::mat4(1.0f));
@@ -671,9 +844,9 @@ int main(int argc, char* argv[]) {
 		glBindVertexArray(0);
 
 		//Particle System
-		float particleRadius = 12.0f;
-		float wallDamping = 0.3f;
-		bool enableSPH = true;
+		float particleRadius = uiParticleRenderSize;
+		float wallDamping = uiWallDamping;
+		bool enableSPH = uiEnableSPH;
 		particleSystem.Update(deltaTime, wallDamping, enableSPH);
 		glm::mat4 particleMVP = perspectiveProjection * view * glm::mat4(1.0f);
 		glm::vec3 particleColor(0.2f, 0.0f, 1.0f);
@@ -747,6 +920,9 @@ int main(int argc, char* argv[]) {
 
 		cubeModel.Draw(shaderprog2);*/
 
+		ImGui::Render();
+		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
 		glfwSwapBuffers(window);
 
 		glfwPollEvents();
@@ -755,6 +931,11 @@ int main(int argc, char* argv[]) {
 	glDeleteVertexArrays(1, &quadVAO);
 	glDeleteBuffers(1, &quadVBO);
 	glDeleteBuffers(1, &quadEBO);
+
+	ImGui_ImplOpenGL3_Shutdown();
+	ImGui_ImplGlfw_Shutdown();
+	ImGui::DestroyContext();
+
 	glfwTerminate();
 	return 0;
 }
