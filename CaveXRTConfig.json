@@ -1,6 +1,6 @@
 {
   "skyboxEnabled": false,
-  "skyboxRootDirectory": "../../../assets/skybox/sceneCubemap",
+  "skyboxRootDirectory": "../../../assets/skybox/FootballField",
   "skyboxFaces": [
     "cubemap_posx.png",
     "cubemap_negx.png",

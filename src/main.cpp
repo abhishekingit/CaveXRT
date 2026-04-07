@@ -423,7 +423,7 @@ int main(int argc, char* argv[]) {
 	Shader skyboxShader("../../../src/Shaders/skyboxvshader.vert", "../../../src/Shaders/skyboxfshader.frag");
 	Shader bboxShader("../../../src/Shaders/bboxvshader.vert", "../../../src/Shaders/bboxfshader.frag");
 	Shader fluidRenderShader("../../../src/Shaders/Particles/fluidRender/fluidCompositev.vert", "../../../src/Shaders/Particles/fluidRender/fluidCompositef.frag");
-	Shader fluidRenderShader("../../../src/Shaders/Particles/fluidRender/fluidCompositev.vert", "../../../src/Shaders/Particles/fluidRender/fluidNarrowRangefilter.frag");
+	Shader fluidNarrowRangeShader("../../../src/Shaders/Particles/fluidRender/fluidCompositev.vert", "../../../src/Shaders/Particles/fluidRender/fluidNarrowRangefilter.frag");
 
 	ParticleSystem particleSystem(
 		50000,
@@ -457,13 +457,13 @@ int main(int argc, char* argv[]) {
 	bool uiEnableParticles = false;
 
 	//Narrow Range filter parameters
-	bool uiEnableNarrowRangeFilter = false;
-	int uiNRFilterRadius = 10;
+	bool uiEnableNarrowRangeFilter = true;
+	int uiNRFilterRadius = 6;
 	float uiNRSigmaSpatial = 2.0f;
 	float uiNRSigmaRangeScale = 0.02f;
-	float uiNRSigmaRangeBase = 0.01f;
-	float uiNRThicknessEpsilon = 1e-6f;
-	float uiNRThresholdRatio = 0.75f;
+	float uiNRSigmaRangeBase = 0.05f;
+	float uiNRThicknessEpsilon = 0.0f;
+	float uiNRThresholdRatio = 2.0f;
 	float uiNRClampRatio = 1.0f;
 	int uiNRMinFilterRadius = 2;
 	float uiNRDepthAdaptiveScale = 0.15f;
@@ -857,6 +857,20 @@ int main(int argc, char* argv[]) {
 			
 		}
 
+		ImGui::SeparatorText("Narrow-Range Filter for Screen space fluid rendering");
+		ImGui::Checkbox("Enable Narrow-Range Filter", &uiEnableNarrowRangeFilter);
+		ImGui::SliderInt("NR Radius", &uiNRFilterRadius, 1, 100);
+		ImGui::SliderFloat("NR Sigma Spatial", &uiNRSigmaSpatial, 0.2f, 20.0f, "%.3f");
+		ImGui::SliderFloat("NR Sigma Range Base", &uiNRSigmaRangeBase, 0.0001f, 0.9f, "%.5f");
+		ImGui::SliderFloat("NR Sigma Range Scale", &uiNRSigmaRangeScale, 0.0f, 0.9f, "%.4f");
+		ImGui::SliderFloat("Thickness Epsilon", &uiNRThicknessEpsilon, 0.0f, 1.0f);
+		ImGui::SliderFloat("NR Threshold Ratio", &uiNRThresholdRatio, 0.1f, 2.0f, "%.3f");
+		ImGui::SliderFloat("NR Clamp Ratio", &uiNRClampRatio, 0.1f, 2.0f, "%.3f");
+		ImGui::SliderInt("NR Min Radius", &uiNRMinFilterRadius, 1, 24);
+		ImGui::SliderFloat("NR Depth Adaptive Scale", &uiNRDepthAdaptiveScale, 0.01f, 2.0f, "%.3f");
+		ImGui::SliderFloat("NR Min Sigma Spatial", &uiNRMinSigmaSpatial, 0.1f, 4.0f, "%.3f");
+
+
 		if (ImGui::CollapsingHeader("Bounds", ImGuiTreeNodeFlags_DefaultOpen)) {
 			ImGui::DragFloat3("Box min", &uiBoxMin.x, 0.01f);
 			ImGui::DragFloat3("Box max", &uiBoxMax.x, 0.01f);
@@ -1010,14 +1024,90 @@ int main(int argc, char* argv[]) {
 			glEnable(GL_DEPTH_TEST);
 
 			fluidRenderTarget.UnBind();
+
+			//narrow range filtering pass
+			if (nrWidth != framebufferWidth || nrHeight != framebufferHeight) {
+				CreateNarrowRangeRenderTargets(framebufferWidth, framebufferHeight);
+			}
+
+			uint32_t depthForComposite = fluidRenderTarget.GetDepthTexture();
+
+			if (uiEnableNarrowRangeFilter) {
+				glDisable(GL_BLEND);
+				glDisable(GL_DEPTH_TEST);
+
+				fluidNarrowRangeShader.use();
+				fluidNarrowRangeShader.setVec2("texelSize", glm::vec2(1.0f / nrWidth, 1.0f / nrHeight));
+				fluidNarrowRangeShader.setInt("filterRadius", uiNRFilterRadius);
+				fluidNarrowRangeShader.setFloat("sigmaSpatial", uiNRSigmaSpatial);
+				fluidNarrowRangeShader.setFloat("sigmaRangeScale", uiNRSigmaRangeScale);
+				fluidNarrowRangeShader.setFloat("sigmaRangeBase", uiNRSigmaRangeBase);
+				fluidNarrowRangeShader.setFloat("thicknessEpsilon", uiNRThicknessEpsilon);
+				fluidNarrowRangeShader.setFloat("particleRadius", particleRadius);
+				fluidNarrowRangeShader.setFloat("thresholdRatio", uiNRThresholdRatio);
+				fluidNarrowRangeShader.setFloat("clampRatio", uiNRClampRatio);
+				fluidNarrowRangeShader.setInt("minFilterRadius", uiNRMinFilterRadius);
+				fluidNarrowRangeShader.setFloat("depthAdaptiveScale", uiNRDepthAdaptiveScale);
+				fluidNarrowRangeShader.setFloat("minSigmaSpatial", uiNRMinSigmaSpatial);
+
+				//horizontal pass
+				glBindFramebuffer(GL_FRAMEBUFFER, nrFBO[0]);
+				glDrawBuffer(GL_COLOR_ATTACHMENT0);
+				glReadBuffer(GL_NONE);
+				glViewport(0, 0, nrWidth, nrHeight);
+				const float clearNR0 = 0.0f;
+				glClearBufferfv(GL_COLOR, 0, &clearNR0);
+
+				fluidNarrowRangeShader.setVec2("direction", glm::vec2(1.0f, 0.0f));
+
+				glActiveTexture(GL_TEXTURE0);
+				glBindTexture(GL_TEXTURE_2D, fluidRenderTarget.GetDepthTexture());
+				fluidNarrowRangeShader.setInt("inputDepthTexture", 0);
+
+				glActiveTexture(GL_TEXTURE1);
+				glBindTexture(GL_TEXTURE_2D, fluidRenderTarget.GetFluidThicknessTexture());
+				fluidNarrowRangeShader.setInt("fluidThicknessTexture", 1);
+
+				glBindVertexArray(quadVAO);
+				glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
+
+				//vertical pass
+				glBindFramebuffer(GL_FRAMEBUFFER, nrFBO[1]);
+				glDrawBuffer(GL_COLOR_ATTACHMENT0);
+				glReadBuffer(GL_NONE);
+				glViewport(0, 0, nrWidth, nrHeight);
+				const float clearNR1 = 0.0f;
+				glClearBufferfv(GL_COLOR, 0, &clearNR1);
+
+				fluidNarrowRangeShader.setVec2("direction", glm::vec2(0.0f, 1.0f));
+
+				glActiveTexture(GL_TEXTURE0);
+				glBindTexture(GL_TEXTURE_2D, nrTex[0]);
+				fluidNarrowRangeShader.setInt("inputDepthTexture", 0);
+
+				glActiveTexture(GL_TEXTURE1);
+				glBindTexture(GL_TEXTURE_2D, fluidRenderTarget.GetFluidThicknessTexture());
+				fluidNarrowRangeShader.setInt("fluidThicknessTexture", 1);
+
+				glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
+				glBindVertexArray(0);
+
+				glBindFramebuffer(GL_FRAMEBUFFER, 0);
+				depthForComposite = nrTex[1];
+
+
+			}
+
+
 			glViewport(0, 0, framebufferWidth, framebufferHeight);
 			glEnable(GL_BLEND);
 			glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 			glDisable(GL_DEPTH_TEST);
 
 			fluidRenderShader.use();
+			fluidRenderShader.setVec2("texelSize", glm::vec2(1.0f / framebufferWidth, 1.0f / framebufferHeight));
 			glActiveTexture(GL_TEXTURE0);
-			glBindTexture(GL_TEXTURE_2D, fluidRenderTarget.GetDepthTexture());
+			glBindTexture(GL_TEXTURE_2D, depthForComposite);
 			fluidRenderShader.setInt("fluidDepthTexture", 0);
 
 			glActiveTexture(GL_TEXTURE1);
@@ -1056,6 +1146,9 @@ int main(int argc, char* argv[]) {
 	glDeleteVertexArrays(1, &quadVAO);
 	glDeleteBuffers(1, &quadVBO);
 	glDeleteBuffers(1, &quadEBO);
+
+	if (nrTex[0] != 0) glDeleteTextures(2, nrTex);
+	if (nrFBO[0] != 0) glDeleteFramebuffers(2, nrFBO);
 
 	ImGui_ImplOpenGL3_Shutdown();
 	ImGui_ImplGlfw_Shutdown();
