@@ -125,7 +125,7 @@ void main() {
 
 					float weight = boundaryGhostPart[bIdx].w;
 					vec3 gradW = gradW_spiky(Rij, r, h);
-					pressureAccel += -PiPressure * weight * gradW / Rhoi;
+					pressureAccel += -PiPressure * weight / Rhoi * gradW;
 				}
 			}
 		}

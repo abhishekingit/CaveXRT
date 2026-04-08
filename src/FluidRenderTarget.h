@@ -16,6 +16,7 @@ public:
 
 	uint32_t GetDepthTexture() const { return fluidDepthTexture; }
 	uint32_t GetFluidThicknessTexture() const { return fluidThicknessTexture; }
+	uint32_t GetFluidNormalTexture() const { return fluidNormalTexture; }
 
 
 	int Width() const { return width; }
@@ -28,6 +29,7 @@ private:
 	uint32_t FBO{ 0 };
 	uint32_t fluidDepthTexture{ 0 };
 	uint32_t fluidThicknessTexture{ 0 };
+	uint32_t fluidNormalTexture{ 0 };
 	uint32_t depthRBO{ 0 };
 	int width{ 0 };
 	int height{ 0 };

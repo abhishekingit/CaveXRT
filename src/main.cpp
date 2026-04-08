@@ -79,7 +79,7 @@ float glossiness = 128;
 
 glm::vec3 bboxMin(-1.5f, 0.0f, -0.7f);
 glm::vec3 bboxMax(1.9f, 4.0f, 0.7f);
-float simparticleRadius = 0.017f;
+float simparticleRadius = 0.020f;
 
 float bboxVerts[] = {
 	bboxMin.x, bboxMin.y, bboxMin.z,
@@ -423,6 +423,7 @@ int main(int argc, char* argv[]) {
 	Shader skyboxShader("../../../src/Shaders/skyboxvshader.vert", "../../../src/Shaders/skyboxfshader.frag");
 	Shader bboxShader("../../../src/Shaders/bboxvshader.vert", "../../../src/Shaders/bboxfshader.frag");
 	Shader fluidRenderShader("../../../src/Shaders/Particles/fluidRender/fluidCompositev.vert", "../../../src/Shaders/Particles/fluidRender/fluidCompositef.frag");
+	Shader fluidNormalReconstructShader("../../../src/Shaders/Particles/fluidRender/fluidCompositev.vert", "../../../src/Shaders/Particles/fluidRender/fluidNormalReconstructf.frag");
 	Shader fluidNarrowRangeShader("../../../src/Shaders/Particles/fluidRender/fluidCompositev.vert", "../../../src/Shaders/Particles/fluidRender/fluidNarrowRangefilter.frag");
 
 	ParticleSystem particleSystem(
@@ -452,6 +453,7 @@ int main(int argc, char* argv[]) {
 	glm::vec3 uiGravity = particleSystem.GetGravity();
 
 	bool uiEnableSPH = true;
+	bool uiSimulationRunning = false;
 	float uiParticleRenderSize = 12.0f;
 	float uiWallDamping = 0.5f;
 	bool uiEnableParticles = false;
@@ -576,9 +578,6 @@ int main(int argc, char* argv[]) {
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
 
 	glBindVertexArray(0);
-
-
-
 
 	glfwSetKeyCallback(window, keyCallback);
 
@@ -800,7 +799,7 @@ int main(int argc, char* argv[]) {
 		);
 
 		ImGui::SetNextWindowSize(
-			ImVec2(panelWidth, static_cast<float>(framebufferHeight) * 0.5f),
+			ImVec2(panelWidth, static_cast<float>(framebufferHeight) * 0.6f),
 			ImGuiCond_Always
 		);
 
@@ -809,6 +808,13 @@ int main(int argc, char* argv[]) {
 
 		ImGui::Checkbox("Enable SPH", &uiEnableSPH);
 		ImGui::Checkbox("Show Particles", &uiEnableParticles);
+		if (ImGui::Button(uiSimulationRunning ? "Pause Simulation" : "Start Simulation")) {
+			uiSimulationRunning = !uiSimulationRunning;
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("Step")) {
+			particleSystem.Update(1.0f / 60.0f, uiWallDamping, uiEnableSPH);
+		}
 		ImGui::SliderFloat("Particle render size", &uiParticleRenderSize, 1.0f, 30.0f);
 		ImGui::SliderFloat("Wall Damping", &uiWallDamping, 0.0f, 1.0f);
 		if (ImGui::DragFloat3("Gravity", &uiGravity.x, 0.05f, -30.0f, 30.0f, "%.2f")) {
@@ -860,8 +866,8 @@ int main(int argc, char* argv[]) {
 		ImGui::SeparatorText("Narrow-Range Filter for Screen space fluid rendering");
 		ImGui::Checkbox("Enable Narrow-Range Filter", &uiEnableNarrowRangeFilter);
 		ImGui::SliderInt("NR Radius", &uiNRFilterRadius, 1, 100);
-		ImGui::SliderFloat("NR Sigma Spatial", &uiNRSigmaSpatial, 0.2f, 20.0f, "%.3f");
-		ImGui::SliderFloat("NR Sigma Range Base", &uiNRSigmaRangeBase, 0.0001f, 0.9f, "%.5f");
+		ImGui::SliderFloat("NR Sigma Spatial", &uiNRSigmaSpatial, 0.2f, 40.0f, "%.3f");
+		ImGui::SliderFloat("NR Sigma Range Base", &uiNRSigmaRangeBase, 0.0001f, 2.0f, "%.5f");
 		ImGui::SliderFloat("NR Sigma Range Scale", &uiNRSigmaRangeScale, 0.0f, 0.9f, "%.4f");
 		ImGui::SliderFloat("Thickness Epsilon", &uiNRThicknessEpsilon, 0.0f, 1.0f);
 		ImGui::SliderFloat("NR Threshold Ratio", &uiNRThresholdRatio, 0.1f, 2.0f, "%.3f");
@@ -924,7 +930,9 @@ int main(int argc, char* argv[]) {
 		float particleRadius = uiParticleRenderSize;
 		float wallDamping = uiWallDamping;
 		bool enableSPH = uiEnableSPH;
-		particleSystem.Update(deltaTime, wallDamping, enableSPH);
+		if (uiSimulationRunning) {
+			particleSystem.Update(deltaTime, wallDamping, enableSPH);
+		}
 		glm::mat4 particleMVP = perspectiveProjection * view * glm::mat4(1.0f);
 
 
@@ -939,7 +947,7 @@ int main(int argc, char* argv[]) {
 		planeModel = glm::translate(planeModel, glm::vec3(0.0f, planeY, 0.0f));
 		//planeModel = glm::translate(planeModel, -modelCenter);
 		planeModel = glm::rotate(planeModel, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-		planeModel = glm::scale(planeModel, glm::vec3(4.0f));
+		planeModel = glm::scale(planeModel, glm::vec3(8.0f));
 
 		glm::mat4 planeView = glm::lookAt(planeCameraPos, caveXRTConfig.cameraTarget, caveXRTConfig.cameraUp);
 
@@ -984,6 +992,26 @@ int main(int argc, char* argv[]) {
 		cubeModel.Draw(skyboxShader);
 		glDepthFunc(GL_LESS);
 		glDepthMask(GL_TRUE);
+
+		//Reflection buffer for fluid planar highlights
+		reflectionRenderTarget.Bind();
+		glViewport(0, 0, reflectionRenderTarget.Width(), reflectionRenderTarget.Height());
+		glClearColor(backgroundColor.x, backgroundColor.y, backgroundColor.z, 1.0f);
+		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+		glDepthMask(GL_FALSE);
+		glDepthFunc(GL_LEQUAL);
+		skyboxShader.use();
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
+		glm::mat4 reflectionSkyboxView = glm::mat4(glm::mat3(reflView));
+		skyboxShader.setMat4("projection", perspectiveProjection);
+		skyboxShader.setMat4("view", reflectionSkyboxView);
+		skyboxShader.setInt("skybox", 0);
+		cubeModel.Draw(skyboxShader);
+		glDepthFunc(GL_LESS);
+		glDepthMask(GL_TRUE);
+		reflectionRenderTarget.UnBind();
+		glViewport(0, 0, framebufferWidth, framebufferHeight);
 
 		//Fluid Rendering 
 
@@ -1031,6 +1059,65 @@ int main(int argc, char* argv[]) {
 			}
 
 			uint32_t depthForComposite = fluidRenderTarget.GetDepthTexture();
+
+			//if (uiEnableNarrowRangeFilter) {
+			//	glDisable(GL_BLEND);
+			//	glDisable(GL_DEPTH_TEST);
+
+			//	fluidNarrowRangeShader.use();
+
+			//	// --- repo uniforms ---
+			//	fluidNarrowRangeShader.setFloat("u_ParticleRadius", particleRadius);
+			//	fluidNarrowRangeShader.setInt("u_FilterSize", uiNRFilterRadius);
+			//	fluidNarrowRangeShader.setInt("u_MaxFilterSize", 32); // try 16–32 later
+			//	fluidNarrowRangeShader.setInt("u_ScreenWidth", nrWidth);
+			//	fluidNarrowRangeShader.setInt("u_ScreenHeight", nrHeight);
+			//	fluidNarrowRangeShader.setInt("u_DoFilter1D", 1);
+
+			//	// ======================
+			//	// HORIZONTAL PASS
+			//	// ======================
+			//	glBindFramebuffer(GL_FRAMEBUFFER, nrFBO[0]);
+			//	glDrawBuffer(GL_COLOR_ATTACHMENT0);
+			//	glReadBuffer(GL_NONE);
+			//	glViewport(0, 0, nrWidth, nrHeight);
+
+			//	const float clearNR0 = 0.0f;
+			//	glClearBufferfv(GL_COLOR, 0, &clearNR0);
+
+			//	fluidNarrowRangeShader.setInt("u_FilterDirection", 0); // 0 = horizontal
+
+			//	glActiveTexture(GL_TEXTURE0);
+			//	glBindTexture(GL_TEXTURE_2D, fluidRenderTarget.GetDepthTexture());
+			//	fluidNarrowRangeShader.setInt("u_DepthTex", 0);
+
+			//	glBindVertexArray(quadVAO);
+			//	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
+
+			//	// ======================
+			//	// VERTICAL PASS
+			//	// ======================
+			//	glBindFramebuffer(GL_FRAMEBUFFER, nrFBO[1]);
+			//	glDrawBuffer(GL_COLOR_ATTACHMENT0);
+			//	glReadBuffer(GL_NONE);
+			//	glViewport(0, 0, nrWidth, nrHeight);
+
+			//	const float clearNR1 = 0.0f;
+			//	glClearBufferfv(GL_COLOR, 0, &clearNR1);
+
+			//	fluidNarrowRangeShader.setInt("u_FilterDirection", 1); // 1 = vertical
+
+			//	glActiveTexture(GL_TEXTURE0);
+			//	glBindTexture(GL_TEXTURE_2D, nrTex[0]);
+			//	fluidNarrowRangeShader.setInt("u_DepthTex", 0);
+
+			//	glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
+
+			//	glBindVertexArray(0);
+			//	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+			//	depthForComposite = nrTex[1];
+			//}
 
 			if (uiEnableNarrowRangeFilter) {
 				glDisable(GL_BLEND);
@@ -1098,6 +1185,33 @@ int main(int argc, char* argv[]) {
 
 			}
 
+			//normal reconstruction pass 
+			fluidRenderTarget.Bind();
+			glDrawBuffer(GL_COLOR_ATTACHMENT2);
+			glReadBuffer(GL_NONE);
+			glViewport(0, 0, fluidRenderTarget.Width(), fluidRenderTarget.Height());
+			const float clearNormal[4]{ 0.0f, 0.0f, 0.0f, 0.0f };
+			glClearBufferfv(GL_COLOR, 2, clearNormal);
+			glDisable(GL_BLEND);
+			glDisable(GL_DEPTH_TEST);
+
+			fluidNormalReconstructShader.use();
+			fluidNormalReconstructShader.setVec2("texelSize", glm::vec2(1.0f / framebufferWidth, 1.0f / framebufferHeight));
+			fluidNormalReconstructShader.setMat4("projection", perspectiveProjection);
+
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_2D, depthForComposite);
+			fluidNormalReconstructShader.setInt("fluidDepthTexture", 0);
+
+			glActiveTexture(GL_TEXTURE1);
+			glBindTexture(GL_TEXTURE_2D, fluidRenderTarget.GetFluidThicknessTexture());
+			fluidNormalReconstructShader.setInt("fluidThicknessTexture", 1);
+
+			glBindVertexArray(quadVAO);
+			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
+			glBindVertexArray(0);
+			fluidRenderTarget.UnBind();
+
 
 			glViewport(0, 0, framebufferWidth, framebufferHeight);
 			glEnable(GL_BLEND);
@@ -1106,6 +1220,20 @@ int main(int argc, char* argv[]) {
 
 			fluidRenderShader.use();
 			fluidRenderShader.setVec2("texelSize", glm::vec2(1.0f / framebufferWidth, 1.0f / framebufferHeight));
+			fluidRenderShader.setMat4("projection", perspectiveProjection);
+			fluidRenderShader.setMat4("inverseView", glm::inverse(view));
+			fluidRenderShader.setFloat("absorption", 0.04f);
+			fluidRenderShader.setFloat("refractionStrength", 0.95f);
+			fluidRenderShader.setFloat("specularIntensity", 0.07f);
+			fluidRenderShader.setFloat("shininess", 80.0f);
+			fluidRenderShader.setFloat("fresnelPower", 4.8f);
+			fluidRenderShader.setFloat("planeReflectionStrength", 0.18f);
+			fluidRenderShader.setVec3("lightDirView", glm::normalize(lightPosView));
+			fluidRenderShader.setVec3("cameraPosWorld", cameraPos);
+			fluidRenderShader.setFloat("planeY", planeY);
+			fluidRenderShader.setFloat("planeHalfExtent", 4.0f);
+			fluidRenderShader.setVec3("shallowColor", glm::vec3(0.92f, 0.95f, 0.98f));
+			fluidRenderShader.setVec3("deepColor", glm::vec3(0.08f, 0.50f, 0.80f));
 			glActiveTexture(GL_TEXTURE0);
 			glBindTexture(GL_TEXTURE_2D, depthForComposite);
 			fluidRenderShader.setInt("fluidDepthTexture", 0);
@@ -1114,6 +1242,14 @@ int main(int argc, char* argv[]) {
 			glBindTexture(GL_TEXTURE_2D, fluidRenderTarget.GetFluidThicknessTexture());
 			fluidRenderShader.setInt("fluidThicknessTexture", 1);
 
+			glActiveTexture(GL_TEXTURE2);
+			glBindTexture(GL_TEXTURE_2D, fluidRenderTarget.GetFluidNormalTexture());
+			fluidRenderShader.setInt("fluidNormalTexture", 2);
+
+			glActiveTexture(GL_TEXTURE3);
+			glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
+			fluidRenderShader.setInt("skybox", 3);
+
 			glBindVertexArray(quadVAO);
 			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
 			glBindVertexArray(0);
@@ -1121,8 +1257,6 @@ int main(int argc, char* argv[]) {
 			glDisable(GL_BLEND);
 			glEnable(GL_DEPTH_TEST);
 		}
-
-		
 
 		/*shaderprog2.use();
 		glm::mat4 lightModel = glm::mat4(1.0f);

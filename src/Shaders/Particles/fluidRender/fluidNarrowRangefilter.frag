@@ -23,7 +23,7 @@ uniform int minFilterRadius;
 uniform float depthAdaptiveScale;
 uniform float minSigmaSpatial;
 
-const int HARD_MAX_RADIUS = 24;
+const int HARD_MAX_RADIUS = 100;
 
 float gaussianWeight(float r, float twoSigma2)
 {

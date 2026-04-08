@@ -236,7 +236,7 @@ void ParticleSystem::InitializeBoundaryGhostParticles() {
 		boundaryGhostParticles.emplace_back(x, y, z, weight);
 	};
 
-	const float weight0 = restDensity * spacing * spacing * spacing * 0.5f;
+	const float weight0 = restDensity * spacing * spacing * spacing * 0.6f;
 
 	//xmin/max
 	for (float y = minB.y; y <= maxB.y + eps; y += spacing) {
