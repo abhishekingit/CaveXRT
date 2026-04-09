@@ -11,7 +11,7 @@ uniform samplerCube skybox;
 uniform vec2 texelSize;
 uniform mat4 projection;
 uniform mat4 inverseView;
-uniform float absorption;
+uniform vec3 absorption;
 uniform float refractionStrength;
 uniform float specularIntensity;
 uniform float shininess;
@@ -85,8 +85,10 @@ void main() {
 	float NDotL = max(dot(N, L), 0.0);
 	float spec = pow(max(dot(N, H), 0.0), shininess) * specularIntensity;
 
-	float depthAtten = exp(-thickness * absorption);
-	vec3 bodyColor = mix(deepColor, shallowColor, depthAtten);
+//	float depthAtten = exp(-thickness * absorption);
+//	vec3 bodyColor = mix(deepColor, shallowColor, depthAtten);
+	float thick = 1.0 - exp(-thickness * 0.35);
+	vec3 transmittance = exp(-thick * absorption * 4.5);
 
 	vec3 Iw = normalize(worldPos - cameraPosWorld);
 	vec3 reflDirW = reflect(Iw, Nw);
@@ -100,7 +102,7 @@ void main() {
 	vec3 skyReflDir = normalize(vec3(reflDirW.x, abs(reflDirW.y), reflDirW.z));
 	vec3 reflectionColor = texture(skybox, skyReflDir).rgb;
 	reflectionColor = mix(reflectionColor, vec3(dot(reflectionColor, vec3(0.2126, 0.7152, 0.0722))), 0.30);
-	reflectionColor *= 0.62;
+	reflectionColor *= 0.78;
 	vec3 refractionColor = reflectionColor;
 
 	float tRefract = (planeY - worldPos.y) / max(abs(refrDirW.y), 1e-4);
@@ -124,21 +126,28 @@ void main() {
 	float planarReflectionWeight = clamp(planeReflectionStrength * 0.45, 0.0, 1.0);
 	reflectionColor = mix(reflectionColor, planeReflectionColor, planarReflectionWeight);
 
-	float fresnel = pow(1.0 - max(dot(N, V), 0.0), fresnelPower);
-	vec3 refractBlue = refractionColor * mix(vec3(1.0), bodyColor, 0.45);
-	float reflectionMix = clamp(0.02 + 0.30 * fresnel, 0.0, 0.55);
-	vec3 envColor = mix(refractBlue, reflectionColor, reflectionMix);
+	float NDotV = clamp(dot(N, V), 0.0, 1.0);
+	float fresnel = pow(1.0 - NDotV, fresnelPower);
+	//vec3 refractBlue = refractionColor * mix(vec3(1.0), bodyColor, 0.45);
+	vec3 refracted = planeRefractColor * transmittance * vec3(0.48, 0.82, 1.0);
+	refracted = mix(refracted, planeRefractColor * shallowColor, 0.03);
+	float reflectionMix = clamp(0.02 + 0.12 * fresnel, 0.0, 0.22);
+	reflectionMix *= mix(0.55, 1.0, NDotV);
+
+	vec3 envColor = mix(refracted, reflectionColor, reflectionMix);
 	vec3 lit = envColor * (0.22 + 0.78 * NDotL) + vec3(spec);
 	lit = mix(lit, lit * vec3(0.75, 0.85, 1.02), 0.20);
+
+	float diffuse = 0.35 + 0.65 * NDotL;
 
 	float thicknessMask = clamp(thickness * 0.12, 0.0, 1.0);
 	float edgeMask = 1.0 - thicknessMask;
 
-	vec3 edgeColor = mix(lit, refractBlue, edgeMask * 0.06);
-	float edgeLuma = dot(edgeColor, vec3(0.2126, 0.7152, 0.0722));
-	edgeColor = mix(edgeColor, vec3(edgeLuma), edgeMask * 0.05);
+//	vec3 edgeColor = mix(lit, refractBlue, edgeMask * 0.06);
+//	float edgeLuma = dot(edgeColor, vec3(0.2126, 0.7152, 0.0722));
+//	edgeColor = mix(edgeColor, vec3(edgeLuma), edgeMask * 0.05);
 
 	float alpha = clamp(0.60 + thickness * 0.60, 0.38, 0.96);
-	vec3 finalColor = edgeColor;
+	vec3 finalColor = envColor * diffuse + vec3(spec) + vec3(0.03, 0.06, 0.10);
 	FragColor = vec4(finalColor, alpha);
 }

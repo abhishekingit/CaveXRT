@@ -1,0 +1,147 @@
+#version 430 core
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(std430, binding = 0) buffer Particles { vec4 pos[]; };
+layout(std430, binding = 1) buffer Velocities { vec4 vel[]; };
+layout(std430, binding = 2) buffer CellCount { uint countBuf[]; };
+layout(std430, binding = 3) buffer CellWrite { uint cellWriteBuf[]; };
+layout(std430, binding = 5) buffer ParticleCell { uint particleCell[]; };
+layout(std430, binding = 6) buffer SortedIndex { uint sortedIndexBuf[]; };
+layout(std430, binding = 7) buffer ParticleDensities { float densityBuf[]; };
+layout(std430, binding = 9) buffer ParticlePressure { float pressureBuf[]; };
+layout(std430, binding = 11) readonly buffer BoundaryCellCount { uint boundaryCountBuf[]; };
+layout(std430, binding = 12) readonly buffer BoundaryCellStart { uint boundaryStartBuf[]; };
+layout(std430, binding = 13) readonly buffer BoundarySortedIndex { uint boundarySortedIndexBuf[]; };
+layout(std430, binding = 15) readonly buffer BoundaryPos { vec4 boundaryGhostPart[]; };
+
+layout(std430, binding = 8) buffer SortedPosition {	vec4 sortedPosBuf[]; };
+layout(std430, binding = 10) buffer SortedVelocity { vec4 sortedVelBuf[]; };
+
+uniform uint particleCount;
+uniform uint gridResX;
+uniform uint gridResY;
+uniform uint gridResZ;
+
+uniform float h;
+uniform float mass;
+uniform float PI;
+uniform float viscosityCoeff;
+uniform float deltaTime;
+
+uniform vec3 boxMin;
+uniform vec3 boxMax;
+uniform vec3 gravity;
+uniform float particleRadius;
+uniform float wallDamping;
+
+uint flatten(uvec3 c) {
+	return c.x + gridResX * (c.y + gridResY * c.z);
+}
+
+vec3 gradW_spiky(vec3 Rij, float r, float hVal) {
+	if (r <= 1e-6 || r >= hVal) return vec3(0.0);
+	float coeff = -45.0 / (PI * pow(hVal, 6.0));
+	float a = (hVal - r);
+	return coeff * a * a * (Rij / r);
+}
+
+float laplacianVisc(float r, float hVal) {
+	if (r >= hVal) return 0.0;
+	float coeff = 45.0 / (PI * pow(hVal, 6.0));
+	return coeff * (hVal - r);
+}
+
+void main() {
+	uint idx = gl_GlobalInvocationID.x;
+	if (idx >= particleCount) return;
+
+	vec3 Pi = pos[idx].xyz;
+	vec3 Vi = vel[idx].xyz;
+	float rhoi = max(densityBuf[idx], 1e-6);
+	float PiPressure = pressureBuf[idx];
+
+	uint cellId = particleCell[idx];
+	ivec3 base = ivec3(int(cellId % gridResX), int((cellId / gridResX) % gridResY), int(cellId / (gridResX * gridResY)));
+
+	vec3 pressureTerm = vec3(0.0);
+	vec3 viscosityTerm = vec3(0.0);
+
+	for (int dz = -1; dz <= 1; dz++) {
+		for (int dy = -1; dy <= 1; dy++) {
+			for (int dx = -1; dx <= 1; dx++) {
+				ivec3 c = base + ivec3(dx, dy, dz);
+				if (c.x < 0 || c.y < 0 || c.z < 0) continue;
+				if (c.x >= int(gridResX) || c.y >= int(gridResY) || c.z >= int(gridResZ)) continue;
+
+				uint nCell = flatten(c);
+				uint start = cellWriteBuf[nCell];
+				uint count = countBuf[nCell];
+
+				for (uint i = 0u; i < count; i++) {
+					uint sortedIndex = start + i;
+					uint j = sortedIndexBuf[sortedIndex];
+					if (j == idx) continue;
+
+					vec3 Pj = sortedPosBuf[sortedIndex].xyz;
+					vec3 Vj = sortedVelBuf[sortedIndex].xyz;
+
+					vec3 Rij = Pi - Pj;
+					float r = length(Rij);
+					if (r <= 1e-6 || r >= h) continue;
+
+					float rhoj = max(densityBuf[j], 1e-6);
+					float PjPressure = pressureBuf[j];
+
+					vec3 gradW = gradW_spiky(Rij, r, h);
+					pressureTerm += -mass * (PiPressure + PjPressure) / (2.0 * rhoj) * gradW;
+					viscosityTerm += viscosityCoeff * mass * (Vj - Vi) / rhoj * laplacianVisc(r, h);
+				}
+			}
+		}
+	}
+
+	for (int dz = -1; dz <= 1; dz++) {
+		for (int dy = -1; dy <= 1; dy++) {
+			for (int dx = -1; dx <= 1; dx++) {
+				ivec3 c = base + ivec3(dx, dy, dz);
+				if (c.x < 0 || c.y < 0 || c.z < 0) continue;
+				if (c.x >= int(gridResX) || c.y >= int(gridResY) || c.z >= int(gridResZ)) continue;
+
+				uint nCell = flatten(c);
+				uint bStart = boundaryStartBuf[nCell];
+				uint bCount = boundaryCountBuf[nCell];
+
+				for (uint i = 0u; i < bCount; i++) {
+					uint bIdx = boundarySortedIndexBuf[bStart + i];
+					vec3 Rij = Pi - boundaryGhostPart[bIdx].xyz;
+					float r = length(Rij);
+					if (r <= 1e-6 || r >= h) continue;
+
+					float weight = boundaryGhostPart[bIdx].w;
+					vec3 gradW = gradW_spiky(Rij, r, h);
+					pressureTerm += -PiPressure * weight / rhoi * gradW;
+				}
+			}
+		}
+	}
+
+	vec3 accel = gravity + viscosityTerm + (pressureTerm / rhoi);
+	vec3 v = Vi + accel * deltaTime;
+	vec3 p = Pi + v * deltaTime;
+
+	vec3 minB = boxMin + vec3(particleRadius);
+	vec3 maxB = boxMax - vec3(particleRadius);
+
+	if (p.x < minB.x) { p.x = minB.x; v.x = -v.x * wallDamping; }
+	else if (p.x > maxB.x) { p.x = maxB.x; v.x = -v.x * wallDamping; }
+
+	if (p.y < minB.y) { p.y = minB.y; v.y = -v.y * wallDamping; }
+	else if (p.y > maxB.y) { p.y = maxB.y; v.y = -v.y * wallDamping; }
+
+	if (p.z < minB.z) { p.z = minB.z; v.z = -v.z * wallDamping; }
+	else if (p.z > maxB.z) { p.z = maxB.z; v.z = -v.z * wallDamping; }
+
+	vel[idx] = vec4(v, 0.0);
+	pos[idx] = vec4(p, 1.0);
+}

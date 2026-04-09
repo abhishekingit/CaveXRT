@@ -2,6 +2,14 @@
 
 layout (local_size_x = 4, local_size_y = 4, local_size_z = 4) in;
 
+layout(std430, binding = 0) buffer Particles {
+	vec4 pos[];
+};
+
+layout(std430, binding = 1) buffer Velocities {
+	vec4 vel[];
+};
+
 layout(std430, binding = 4) buffer CellWrite {
 	uint cellWriteBuf[];
 };
@@ -12,6 +20,14 @@ layout(std430, binding = 5) readonly buffer ParticleCell {
 
 layout(std430, binding = 6) buffer SortedIndex {
 	uint sortedIndexBuf[];
+};
+
+layout(std430, binding = 8) buffer SortedPosition {
+	vec4 sortedPosBuf[];
+};
+
+layout(std430, binding = 10) buffer SortedVelocity {
+	vec4 sortedVelBuf[];
 };
 
 uniform uint particleCount;
@@ -32,4 +48,6 @@ void main() {
 	uint cell = particleCell[idx];
 	uint destIdx = atomicAdd(cellWriteBuf[cell], 1u);
 	sortedIndexBuf[destIdx] = idx;
+	sortedPosBuf[destIdx] = pos[idx];
+	sortedVelBuf[destIdx] = vel[idx];
 }

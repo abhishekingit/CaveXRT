@@ -8,7 +8,7 @@
 
 ParticleSystem::ParticleSystem(size_t maxParticles, float simRadius, const glm::vec3& gridMin, const glm::vec3& gridMax, const char* computeShaderPath, const char* vertexShaderPath, const char* fragmentShaderPath) : maxParticles(maxParticles), PARTICLE_SIM_RADIUS(simRadius), GRID_MIN(gridMin), GRID_MAX(gridMax) {
 	particles.resize(maxParticles);
-	computeProgram = new CaveCompute(computeShaderPath);
+	//computeProgram = new CaveCompute(computeShaderPath);
 	renderShader = new Shader(vertexShaderPath, fragmentShaderPath);
 	boundaryRenderShader = new Shader("../../../src/Shaders/Particles/boundaryvshader.vert", "../../../src/Shaders/Particles/boundaryfshader.frag");
 	fluidDepthShader = new Shader("../../../src/Shaders/Particles/fluidRender/particlevshader.vert", "../../../src/Shaders/Particles/fluidRender/fluidDepthpass.frag");
@@ -22,11 +22,13 @@ ParticleSystem::ParticleSystem(size_t maxParticles, float simRadius, const glm::
 	gridPrefixAddProgram = new CaveCompute("../../../src/Shaders/Particles/gridprefixadd.comp");
 	gridCopyOffsetWriteProgram = new CaveCompute("../../../src/Shaders/Particles/gridoffsetcopy.comp");
 
-	densityComputeProgram = new CaveCompute("../../../src/Shaders/Particles/densitysimcshader.comp");
-	viscosityComputeProgram = new CaveCompute("../../../src/Shaders/Particles/viscositysimcshader.comp");
-	pressureComputeProgram = new CaveCompute("../../../src/Shaders/Particles/pressuresimcshader.comp");
-	sphVorticityComputeProgram = new CaveCompute("../../../src/Shaders/Particles/sphvorticity.comp");
-	sphVorticityApplyComputeProgram = new CaveCompute("../../../src/Shaders/Particles/sphvorticityapply.comp");
+	/*densityComputeProgram = new CaveCompute("../../../src/Shaders/Particles/densitysimcshader.comp");*/
+	sphDensityPressureComputeProgram = new CaveCompute("../../../src/Shaders/Particles/sphdensitypressure.comp");
+	/*viscosityComputeProgram = new CaveCompute("../../../src/Shaders/Particles/viscositysimcshader.comp");
+	pressureComputeProgram = new CaveCompute("../../../src/Shaders/Particles/pressuresimcshader.comp");*/
+	sphForceIntegrateComputeProgram = new CaveCompute("../../../src/Shaders/Particles/sphforceintegrate.comp");
+	/*sphVorticityComputeProgram = new CaveCompute("../../../src/Shaders/Particles/sphvorticity.comp");
+	sphVorticityApplyComputeProgram = new CaveCompute("../../../src/Shaders/Particles/sphvorticityapply.comp");*/
 
 	//pbf compute programs
 	pbfPredictPosComputeProgram = new CaveCompute("../../../src/Shaders/Particles/pbf/pbfpospredict.comp");
@@ -121,12 +123,22 @@ ParticleSystem::~ParticleSystem() {
 		ssboBoundarySortedIndex = 0;
 	}
 
+	if (ssboSortedPos) {
+		glDeleteBuffers(1, &ssboSortedPos);
+		ssboSortedPos = 0;
+	}
+
+	if (ssboSortedVel) {
+		glDeleteBuffers(1, &ssboSortedVel);
+		ssboSortedVel = 0;
+	}
+
 	if (vao) {
 		glDeleteVertexArrays(1, &vao);
 		vao = 0;
 	}
 
-	if (computeProgram) {
+	/*if (computeProgram) {
 		delete computeProgram;
 		computeProgram = nullptr;
 	}
@@ -134,9 +146,14 @@ ParticleSystem::~ParticleSystem() {
 	if (densityComputeProgram) {
 		delete densityComputeProgram;
 		densityComputeProgram = nullptr;
+	}*/
+
+	if (sphDensityPressureComputeProgram) {
+		delete sphDensityPressureComputeProgram;
+		sphDensityPressureComputeProgram = nullptr;
 	}
 
-	if (viscosityComputeProgram) {
+	/*if (viscosityComputeProgram) {
 		delete viscosityComputeProgram;
 		viscosityComputeProgram = nullptr;
 	}
@@ -144,9 +161,14 @@ ParticleSystem::~ParticleSystem() {
 	if (pressureComputeProgram) {
 		delete pressureComputeProgram;
 		pressureComputeProgram = nullptr;
+	}*/
+
+	if (sphForceIntegrateComputeProgram) {
+		delete sphForceIntegrateComputeProgram;
+		sphForceIntegrateComputeProgram = nullptr;
 	}
 
-	if (sphVorticityComputeProgram) {
+	/*if (sphVorticityComputeProgram) {
 		delete sphVorticityComputeProgram;
 		sphVorticityComputeProgram = nullptr;
 	}
@@ -154,7 +176,7 @@ ParticleSystem::~ParticleSystem() {
 	if (sphVorticityApplyComputeProgram) {
 		delete sphVorticityApplyComputeProgram;
 		sphVorticityApplyComputeProgram = nullptr;
-	}
+	}*/
 
 	if(pbfPredictPosComputeProgram) {
 		delete pbfPredictPosComputeProgram;
@@ -228,9 +250,10 @@ void ParticleSystem::InitializeBoundaryGhostParticles() {
 
 	const float spacing = boundarySpacing;
 	const float inset = PARTICLE_SIM_RADIUS * 0.10f;
-	const glm::vec3 minB = GRID_MIN + glm::vec3(inset);
-	const glm::vec3 maxB = GRID_MAX - glm::vec3(inset);
+	const glm::vec3 minB = GRID_MIN;
+	const glm::vec3 maxB = GRID_MAX;
 	const float eps = 1e-6f;
+	const int layers = 4;
 
 	auto push = [&](float x, float y, float z, float weight) {
 		boundaryGhostParticles.emplace_back(x, y, z, weight);
@@ -238,29 +261,34 @@ void ParticleSystem::InitializeBoundaryGhostParticles() {
 
 	const float weight0 = restDensity * spacing * spacing * spacing * 0.6f;
 
-	//xmin/max
-	for (float y = minB.y; y <= maxB.y + eps; y += spacing) {
-		for (float z = minB.z; z <= maxB.z + eps; z += spacing) {
-			push(minB.x, y, z, weight0);
-			push(maxB.x, y, z, weight0);
+	for (int l = 1; l <= layers; l++) {
+		float offset = l * spacing;
+		//xmin/max
+		for (float y = minB.y; y <= maxB.y + eps; y += spacing) {
+			for (float z = minB.z; z <= maxB.z + eps; z += spacing) {
+				push(minB.x - offset, y, z, weight0);
+				push(maxB.x + offset, y, z, weight0);
+			}
+		}
+
+		//ymin/max
+		for (float x = minB.x + spacing; x <= maxB.x - spacing + eps; x += spacing) {
+			for (float z = minB.z; z <= maxB.z + eps; z += spacing) {
+				push(x, minB.y - offset, z, weight0);
+				push(x, maxB.y + offset, z, weight0);
+			}
+		}
+
+		//zmin/zmax
+		for (float x = minB.x + spacing; x <= maxB.x - spacing + 1e-6f; x += spacing) {
+			for (float y = minB.y + spacing; y <= maxB.y - spacing + 1e-6f; y += spacing) {
+				push(x, y, minB.z - offset, weight0);
+				push(x, y, maxB.z + offset, weight0);
+			}
 		}
 	}
 
-	//ymin/max
-	for (float x = minB.x + spacing; x <= maxB.x - spacing + eps; x += spacing) {
-		for (float z = minB.z; z <= maxB.z + eps; z += spacing) {
-			push(x, minB.y, z, weight0);
-			push(x, maxB.y, z, weight0);
-		}
-	}
-
-	//zmin/zmax
-	for (float x = minB.x + spacing; x <= maxB.x - spacing + 1e-6f; x += spacing) {
-		for (float y = minB.y + spacing; y <= maxB.y - spacing + 1e-6f; y += spacing) {
-			push(x, y, minB.z, weight0);
-			push(x, y, maxB.z, weight0);
-		}
-	}
+	
 
 	boundaryCount = static_cast<uint32_t>(boundaryGhostParticles.size());
 	//boundary neighbor search
@@ -481,6 +509,12 @@ void ParticleSystem::BuildUniformGrid() {
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 	glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssboPos);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssboVel);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, ssboSortedIndex);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 8, ssboSortedPos);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 10, ssboSortedVel);
+
 	gridParticleReorderProgram->use();
 	gridParticleReorderProgram->setUint("particleCount", static_cast<uint32_t>(maxParticles));
 	gridParticleReorderProgram->dispatch(particleGroups, 1, 1);
@@ -700,6 +734,17 @@ void ParticleSystem::InitializeParticles() {
 	glBufferData(GL_SHADER_STORAGE_BUFFER, vorticityData.size() * sizeof(glm::vec4), vorticityData.data(), GL_DYNAMIC_DRAW);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 14, ssboVorticity);
 
+	//not yet binded
+	if (ssboSortedPos == 0) glGenBuffers(1, &ssboSortedPos);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssboSortedPos);
+	std::vector<glm::vec4> sortedPosData(maxParticles, glm::vec4(0.0f));
+	glBufferData(GL_SHADER_STORAGE_BUFFER, sortedPosData.size() * sizeof(glm::vec4), sortedPosData.data(), GL_DYNAMIC_DRAW);
+
+	if (ssboSortedVel == 0) glGenBuffers(1, &ssboSortedVel);
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssboSortedVel);
+	std::vector < glm::vec4> sortedVelData(maxParticles, glm::vec4(0.0f));
+	glBufferData(GL_SHADER_STORAGE_BUFFER, sortedVelData.size() * sizeof(glm::vec4), sortedVelData.data(), GL_DYNAMIC_DRAW);
+
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 
 	if (vao == 0) glGenVertexArrays(1, &vao);
@@ -732,105 +777,49 @@ void ParticleSystem::Update(float deltaTime, float wallDamping, bool enableSPH) 
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssboPos);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssboVel);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 7, ssboDensity);
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 8, ssboViscosityAccel);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 9, ssboPressure);
-		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 10, ssboPressureAccel);
 
 		BuildUniformGrid();
 		//for boundary using same binding
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 8, ssboSortedPos);
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 10, ssboSortedVel);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 15, ssboBoundaryGhostParticles);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 11, ssboBoundaryCellCount);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 12, ssboBoundaryCellStart);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 13, ssboBoundarySortedIndex);
 
-		if (!densityComputeProgram) return;
-		densityComputeProgram->use();
-		densityComputeProgram->setUint("particleCount", maxParticles);
-		densityComputeProgram->setUint("gridResX", static_cast<uint32_t>(GRID_RES.x));
-		densityComputeProgram->setUint("gridResY", static_cast<uint32_t>(GRID_RES.y));
-		densityComputeProgram->setUint("gridResZ", static_cast<uint32_t>(GRID_RES.z));
-		densityComputeProgram->setUint("boundaryCount", boundaryCount);
-		densityComputeProgram->setFloat("h", h);
-		densityComputeProgram->setFloat("mass", mass);
-		densityComputeProgram->setFloat("PI", this->PI);
-		densityComputeProgram->setFloat("restDensity", this->restDensity);
-		densityComputeProgram->dispatch(groups, 1, 1);
+		if (!sphDensityPressureComputeProgram || !sphForceIntegrateComputeProgram) return;
+
+		sphDensityPressureComputeProgram->use();
+		sphDensityPressureComputeProgram->setUint("particleCount", maxParticles);
+		sphDensityPressureComputeProgram->setUint("gridResX", static_cast<uint32_t>(GRID_RES.x));
+		sphDensityPressureComputeProgram->setUint("gridResY", static_cast<uint32_t>(GRID_RES.y));
+		sphDensityPressureComputeProgram->setUint("gridResZ", static_cast<uint32_t>(GRID_RES.z));
+		sphDensityPressureComputeProgram->setUint("boundaryCount", boundaryCount);
+		sphDensityPressureComputeProgram->setFloat("h", h);
+		sphDensityPressureComputeProgram->setFloat("mass", mass);
+		sphDensityPressureComputeProgram->setFloat("PI", this->PI);
+		sphDensityPressureComputeProgram->setFloat("restDensity", this->restDensity);
+		sphDensityPressureComputeProgram->setFloat("stiffness", this->stiffness);
+		sphDensityPressureComputeProgram->dispatch(groups, 1, 1);
 		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
-		//viscosity pass SPH
-		if (!viscosityComputeProgram) return;
-		viscosityComputeProgram->use();
-		viscosityComputeProgram->setUint("particleCount", maxParticles);
-		viscosityComputeProgram->setUint("gridResX", static_cast<uint32_t>(GRID_RES.x));
-		viscosityComputeProgram->setUint("gridResY", static_cast<uint32_t>(GRID_RES.y));
-		viscosityComputeProgram->setUint("gridResZ", static_cast<uint32_t>(GRID_RES.z));
-		viscosityComputeProgram->setUint("boundaryCount", boundaryCount);
-		viscosityComputeProgram->setFloat("h", h);
-		viscosityComputeProgram->setFloat("mass", mass);
-		viscosityComputeProgram->setFloat("PI", this->PI);
-		viscosityComputeProgram->setFloat("viscosityCoeff", this->viscosityCoeff);
-		viscosityComputeProgram->dispatch(groups, 1, 1);
-		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-
-		if (!pressureComputeProgram) return;
-		pressureComputeProgram->use();
-		pressureComputeProgram->setUint("particleCount", maxParticles);
-		pressureComputeProgram->setUint("gridResX", static_cast<uint32_t>(GRID_RES.x));
-		pressureComputeProgram->setUint("gridResY", static_cast<uint32_t>(GRID_RES.y));
-		pressureComputeProgram->setUint("gridResZ", static_cast<uint32_t>(GRID_RES.z));
-		pressureComputeProgram->setUint("boundaryCount", boundaryCount);
-		pressureComputeProgram->setFloat("h", h);
-		pressureComputeProgram->setFloat("mass", mass);
-		pressureComputeProgram->setFloat("PI", this->PI);
-		pressureComputeProgram->setFloat("restDensity", this->restDensity);
-		pressureComputeProgram->setFloat("stiffness", this->stiffness);
-		pressureComputeProgram->dispatch(groups, 1, 1);
-		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-
-		if (!sphVorticityComputeProgram) return;
-		sphVorticityComputeProgram->use();
-		sphVorticityComputeProgram->setUint("particleCount", maxParticles);
-		sphVorticityComputeProgram->setUint("gridResX", static_cast<uint32_t>(GRID_RES.x));
-		sphVorticityComputeProgram->setUint("gridResY", static_cast<uint32_t>(GRID_RES.y));
-		sphVorticityComputeProgram->setUint("gridResZ", static_cast<uint32_t>(GRID_RES.z));
-		sphVorticityComputeProgram->setFloat("h", h);
-		sphVorticityComputeProgram->setFloat("mass", mass);
-		sphVorticityComputeProgram->setFloat("PI", this->PI);
-		sphVorticityComputeProgram->setFloat("restDensity", this->restDensity);
-		sphVorticityComputeProgram->dispatch(groups, 1, 1);
-		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-
-		if (!sphVorticityApplyComputeProgram) return;
-		sphVorticityApplyComputeProgram->use();
-		sphVorticityApplyComputeProgram->setUint("particleCount", maxParticles);
-		sphVorticityApplyComputeProgram->setUint("gridResX", static_cast<uint32_t>(GRID_RES.x));
-		sphVorticityApplyComputeProgram->setUint("gridResY", static_cast<uint32_t>(GRID_RES.y));
-		sphVorticityApplyComputeProgram->setUint("gridResZ", static_cast<uint32_t>(GRID_RES.z));
-		sphVorticityApplyComputeProgram->setFloat("h", h);
-		sphVorticityApplyComputeProgram->setFloat("mass", mass);
-		sphVorticityApplyComputeProgram->setFloat("PI", this->PI);
-		sphVorticityApplyComputeProgram->setFloat("deltaTime", dt);
-		sphVorticityApplyComputeProgram->setFloat("vorticityEpsilon", this->vorticityEpsilon);
-		sphVorticityApplyComputeProgram->dispatch(groups, 1, 1);
-		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
-
-		if (!computeProgram) return;
-		computeProgram->use();
-		computeProgram->setFloat("deltaTime", dt);
-		computeProgram->setUint("particleCount", maxParticles);
-		computeProgram->setVec3("boxMin", this->GRID_MIN);
-		computeProgram->setVec3("boxMax", this->GRID_MAX);
-		computeProgram->setFloat("particleRadius", this->PARTICLE_SIM_RADIUS);
-		computeProgram->setVec3("gravity", this->GRAVITY);
-		computeProgram->setFloat("wallDamping", wallDamping);
-
-		//part of density debug test
-		computeProgram->setFloat("restDensity", this->restDensity);
-		computeProgram->setFloat("buoyancyCoeff", 0.05f);
-		computeProgram->setFloat("densityDragCoeff", 0.2f);
-
-
-		computeProgram->dispatch(groups, 1, 1);
+		sphForceIntegrateComputeProgram->use();
+		sphForceIntegrateComputeProgram->setUint("particleCount", maxParticles);
+		sphForceIntegrateComputeProgram->setUint("gridResX", static_cast<uint32_t>(GRID_RES.x));
+		sphForceIntegrateComputeProgram->setUint("gridResY", static_cast<uint32_t>(GRID_RES.y));
+		sphForceIntegrateComputeProgram->setUint("gridResZ", static_cast<uint32_t>(GRID_RES.z));
+		sphForceIntegrateComputeProgram->setFloat("h", h);
+		sphForceIntegrateComputeProgram->setFloat("mass", mass);
+		sphForceIntegrateComputeProgram->setFloat("PI", this->PI);
+		sphForceIntegrateComputeProgram->setFloat("viscosityCoeff", this->viscosityCoeff);
+		sphForceIntegrateComputeProgram->setFloat("deltaTime", dt);
+		sphForceIntegrateComputeProgram->setVec3("boxMin", this->GRID_MIN);
+		sphForceIntegrateComputeProgram->setVec3("boxMax", this->GRID_MAX);
+		sphForceIntegrateComputeProgram->setFloat("particleRadius", this->PARTICLE_SIM_RADIUS);
+		sphForceIntegrateComputeProgram->setVec3("gravity", this->GRAVITY);
+		sphForceIntegrateComputeProgram->setFloat("wallDamping", wallDamping);
+		sphForceIntegrateComputeProgram->dispatch(groups, 1, 1);
 		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
 	}
 	else {

@@ -105,6 +105,8 @@ private:
 	uint32_t ssboCellWrite = 0;
 	uint32_t ssboParticleCell = 0;
 	uint32_t ssboSortedIndex = 0;
+	uint32_t ssboSortedPos = 0;
+	uint32_t ssboSortedVel = 0;
 	uint32_t ssboGridBlockSums = 0;
 
 	uint32_t ssboBoundaryGhostParticles = 0;
@@ -141,15 +143,17 @@ private:
 	CaveCompute* gridCopyOffsetWriteProgram = nullptr;
 
 	//integrator
-	CaveCompute* computeProgram = nullptr;
+	//CaveCompute* computeProgram = nullptr;
 	//density compute
-	CaveCompute* densityComputeProgram = nullptr;
+	//CaveCompute* densityComputeProgram = nullptr;
+	CaveCompute* sphDensityPressureComputeProgram = nullptr;
 	//viscosity compute
-	CaveCompute* viscosityComputeProgram = nullptr;
+	//CaveCompute* viscosityComputeProgram = nullptr;
 	//pressure compute
-	CaveCompute* pressureComputeProgram = nullptr;
-	CaveCompute* sphVorticityComputeProgram = nullptr;
-	CaveCompute* sphVorticityApplyComputeProgram = nullptr;
+	//CaveCompute* pressureComputeProgram = nullptr;
+	CaveCompute* sphForceIntegrateComputeProgram = nullptr;
+	//CaveCompute* sphVorticityComputeProgram = nullptr;
+	//CaveCompute* sphVorticityApplyComputeProgram = nullptr;
 
 
 	//pbf compute programs

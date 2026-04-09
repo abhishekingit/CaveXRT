@@ -427,7 +427,7 @@ int main(int argc, char* argv[]) {
 	Shader fluidNarrowRangeShader("../../../src/Shaders/Particles/fluidRender/fluidCompositev.vert", "../../../src/Shaders/Particles/fluidRender/fluidNarrowRangefilter.frag");
 
 	ParticleSystem particleSystem(
-		50000,
+		80000,
 		simparticleRadius,
 		bboxMin,
 		bboxMax,
@@ -1222,18 +1222,18 @@ int main(int argc, char* argv[]) {
 			fluidRenderShader.setVec2("texelSize", glm::vec2(1.0f / framebufferWidth, 1.0f / framebufferHeight));
 			fluidRenderShader.setMat4("projection", perspectiveProjection);
 			fluidRenderShader.setMat4("inverseView", glm::inverse(view));
-			fluidRenderShader.setFloat("absorption", 0.04f);
+			fluidRenderShader.setVec3("absorption", glm::vec3(3.5, 1.2, 0.30));
 			fluidRenderShader.setFloat("refractionStrength", 0.95f);
-			fluidRenderShader.setFloat("specularIntensity", 0.07f);
+			fluidRenderShader.setFloat("specularIntensity", 0.7f);
 			fluidRenderShader.setFloat("shininess", 80.0f);
-			fluidRenderShader.setFloat("fresnelPower", 4.8f);
-			fluidRenderShader.setFloat("planeReflectionStrength", 0.18f);
+			fluidRenderShader.setFloat("fresnelPower", 2.5f);
+			fluidRenderShader.setFloat("planeReflectionStrength", 0.6f);
 			fluidRenderShader.setVec3("lightDirView", glm::normalize(lightPosView));
 			fluidRenderShader.setVec3("cameraPosWorld", cameraPos);
 			fluidRenderShader.setFloat("planeY", planeY);
 			fluidRenderShader.setFloat("planeHalfExtent", 4.0f);
-			fluidRenderShader.setVec3("shallowColor", glm::vec3(0.92f, 0.95f, 0.98f));
-			fluidRenderShader.setVec3("deepColor", glm::vec3(0.08f, 0.50f, 0.80f));
+			fluidRenderShader.setVec3("shallowColor", glm::vec3(0.32, 0.68, 1.00));
+			fluidRenderShader.setVec3("deepColor", glm::vec3(0.03, 0.18, 0.56));
 			glActiveTexture(GL_TEXTURE0);
 			glBindTexture(GL_TEXTURE_2D, depthForComposite);
 			fluidRenderShader.setInt("fluidDepthTexture", 0);
