@@ -12,6 +12,8 @@ uniform vec3 boxMin;
 uniform vec3 boxMax;
 uniform float particleRadius;
 uniform float wallDamping;
+uniform float velocityDamping;
+uniform float maxVelocity;
 
 void main() {
 	uint idx = gl_GlobalInvocationID.x;
@@ -32,6 +34,15 @@ void main() {
 
 	if(Pnew.z <= minB.z && Vnew.z < 0.0) Vnew.z = -Vnew.z * wallDamping;
 	if(Pnew.z >= maxB.z && Vnew.z > 0.0) Vnew.z = -Vnew.z * wallDamping;
+
+	//temporary
+	float speed = length(Vnew);
+	if(speed > maxVelocity && speed > 1e-6) {
+		Vnew *= (maxVelocity / speed);
+	}
+	else if(speed > maxVelocity * 0.85) {
+		Vnew *= velocityDamping;
+	}
 
 	pos[idx] = vec4(clamp(Pnew, minB, maxB), 1.0);
 	vel[idx] = vec4(Vnew, 0.0);

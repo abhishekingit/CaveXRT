@@ -259,7 +259,7 @@ void ParticleSystem::InitializeBoundaryGhostParticles() {
 		boundaryGhostParticles.emplace_back(x, y, z, weight);
 	};
 
-	const float weight0 = restDensity * spacing * spacing * spacing * 0.6f;
+	const float weight0 = restDensity * spacing * spacing * spacing * 0.8f;
 
 	for (int l = 1; l <= layers; l++) {
 		float offset = l * spacing;
@@ -391,7 +391,7 @@ void ParticleSystem::InitializeGrid() {
 
 }
 
-void ParticleSystem::BuildUniformGrid() {
+void ParticleSystem::BuildUniformGrid(bool usePredictedPositions) {
 	auto divUp = [](uint32_t a, uint32_t b) { return (a + b - 1u) / b; };
 	const uint32_t scanElemsPerGroup = 512u;
 	const uint32_t scanGroupCount = divUp(GRID_VOXEL_COUNT, scanElemsPerGroup);
@@ -509,7 +509,7 @@ void ParticleSystem::BuildUniformGrid() {
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 	glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
-	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssboPos);
+	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, usePredictedPositions ? ssboPredPos : ssboPos);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssboVel);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 6, ssboSortedIndex);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 8, ssboSortedPos);
@@ -594,26 +594,50 @@ void ParticleSystem::InitializeParticles() {
 		const float damHeight = size.y * 0.75f;
 		const float damDepth = size.z * 0.45f;
 
+		auto emitFallingStack = [&](float xMin, float xMax, float zMin, float zMax, uint32_t targetCount, float s) {
+			if(targetCount == 0u) return;
+			float xSpan = glm::max(0.0f, xMax - xMin);
+			float zSpan = glm::max(0.0f, zMax - zMin);
+			uint32_t xCount = static_cast<uint32_t>(xSpan / s) + 1u;
+			uint32_t zCount = static_cast<uint32_t>(zSpan / s) + 1u;
+			if(xCount == 0u) xCount = 1u;
+			if(zCount == 0u) zCount = 1u;
+			uint32_t perLayer = xCount * zCount;
+			if(perLayer == 0u) perLayer = 1u;
+			uint32_t layerCount = (targetCount + perLayer - 1u) / perLayer;
+
+			float topY = maxB.y - PARTICLE_SIM_RADIUS;
+			float bottomY = topY - (static_cast<float>(layerCount - 1u) * s);
+			float minBottomY = minB.y + PARTICLE_SIM_RADIUS;
+			if(bottomY < minBottomY) bottomY = minBottomY;
+
+			uint32_t emitted = 0u;
+			for(float y = bottomY; y <= topY + 1e-6f && idx < maxParticles && emitted < targetCount; y += s) {
+				for(float z = zMin; z <= zMax + 1e-6f && idx < maxParticles && emitted < targetCount; z += s) {
+					for(float x = xMin; x <= xMax + 1e-6f && idx < maxParticles && emitted < targetCount; x += s) {
+						glm::vec3 p = glm::clamp(glm::vec3(x, y, z), GRID_MIN + glm::vec3(PARTICLE_SIM_RADIUS), GRID_MAX - glm::vec3(PARTICLE_SIM_RADIUS));
+						writeParticle(idx, p, glm::vec3(0.0f));
+						idx++;
+						emitted++;
+					}
+				}
+			}
+		};
+
 		if (spawnMode == SpawnMode::SingleDam) {
 			const float damWidth = size.x * 0.36f;
-			const float dropBaseY = minB.y + size.y * 0.20f;
-			const float dropTopY = glm::min(dropBaseY + damHeight, maxB.y);
-			glm::vec3 b0Min(minB.x, dropBaseY, minB.z + (size.z - damDepth) * 0.5f);
-			glm::vec3 b0Max(minB.x + damWidth, dropTopY, minB.z + (size.z + damDepth) * 0.5f);
-			emitBlock(b0Min, b0Max, glm::vec3(0.0f), singleDamSpacing);
+			const float zMin = minB.z + (size.z - damDepth) * 0.5f;
+			const float zMax = minB.z + (size.z + damDepth) * 0.5f;
+			emitFallingStack(minB.x, minB.x + damWidth, zMin, zMax, static_cast<uint32_t>(maxParticles), singleDamSpacing);
 		}
 		else if (spawnMode == SpawnMode::DoubleDam) {
 			const float damWidth = size.x * 0.22f;
-			const float dropBaseY = minB.y + size.y * 0.25f;
-			const float dropTopY = glm::min(dropBaseY + damHeight, maxB.y);
-			glm::vec3 leftMin(minB.x, dropBaseY, minB.z + (size.z - damDepth) * 0.5f);
-			glm::vec3 leftMax(minB.x + damWidth, dropTopY, minB.z + (size.z + damDepth) * 0.5f);
-
-			glm::vec3 rightMin(maxB.x - damWidth, dropBaseY, minB.z + (size.z - damDepth) * 0.5f);
-			glm::vec3 rightMax(maxB.x, dropTopY, minB.z + (size.z + damDepth) * 0.5f);
-
-			emitBlock(leftMin, leftMax, glm::vec3(0.0f), spacing);
-			emitBlock(rightMin, rightMax, glm::vec3(0.0f), spacing);
+			const float zMin = minB.z + (size.z - damDepth) * 0.5f;
+			const float zMax = minB.z + (size.z + damDepth) * 0.5f;
+			uint32_t leftTarget = static_cast<uint32_t>(maxParticles / 2u);
+			uint32_t rightTarget = static_cast<uint32_t>(maxParticles) - leftTarget;
+			emitFallingStack(minB.x, minB.x + damWidth, zMin, zMax, leftTarget, spacing);
+			emitFallingStack(maxB.x - damWidth, maxB.x, zMin, zMax, rightTarget, spacing);
 		}
 		else {
 			const float sheetSpacing = PARTICLE_SIM_RADIUS * 2.0f;
@@ -656,18 +680,12 @@ void ParticleSystem::InitializeParticles() {
 		if (idx == 0) {
 			fillRandom();
 		}
-		else {
-			const uint32_t seededCount = idx;
-			const float jitter = PARTICLE_SIM_RADIUS * 0.12f;
-
-			for (; idx < maxParticles; idx++) {
-				uint32_t wrap = idx % seededCount;
-
-				glm::vec3 p = glm::vec3(posData[wrap]);
-				p += glm::vec3(ux(rng), 0.0f, uz(rng)) * jitter; // tiny xz jitter only
-				p = glm::clamp(p, GRID_MIN + glm::vec3(PARTICLE_SIM_RADIUS), GRID_MAX - glm::vec3(PARTICLE_SIM_RADIUS));
-
-				writeParticle(idx, p, glm::vec3(velData[wrap]));
+		else if (idx < maxParticles) {
+			glm::vec3 fallbackMin(minB.x + spacing, minB.y + PARTICLE_SIM_RADIUS, minB.z + spacing);
+			glm::vec3 fallbackMax(maxB.x - spacing, maxB.y - PARTICLE_SIM_RADIUS, maxB.z - spacing);
+			emitBlock(fallbackMin, fallbackMax, glm::vec3(0.0f), spacing);
+			if (idx < maxParticles) {
+				fillRandom();
 			}
 		}
 	}
@@ -767,6 +785,7 @@ void ParticleSystem::Update(float deltaTime, float wallDamping, bool enableSPH) 
 	const float dx = PARTICLE_SIM_RADIUS * 2.0f;
 	const float mass = this->restDensity * dx * dx * dx;
 	const int substeps = 2;
+	bool usePredictedPositionsFlag = !enableSPH;
 	//const float mass = 0.8 * pow(dx, 3) * this->restDensity;
 
 	
@@ -779,7 +798,7 @@ void ParticleSystem::Update(float deltaTime, float wallDamping, bool enableSPH) 
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 7, ssboDensity);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 9, ssboPressure);
 
-		BuildUniformGrid();
+		BuildUniformGrid(usePredictedPositionsFlag);
 		//for boundary using same binding
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 8, ssboSortedPos);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 10, ssboSortedVel);
@@ -829,8 +848,13 @@ void ParticleSystem::Update(float deltaTime, float wallDamping, bool enableSPH) 
 
 			//glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 8, ssboViscosityAccel);
 			//for toggling
+			glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssboPos);
+			glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssboVel);
+			glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 7, ssboDensity);
+			glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 8, ssboViscosityAccel); 
 			glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 11, ssboPredPos);
-			glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 8, ssboViscosityAccel);
+			glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 12, ssboLambda);
+			glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 13, ssboDeltaPos);
 
 			uint32_t pbfIter = 0;
 			if (!pbfPredictPosComputeProgram) return;
@@ -846,7 +870,7 @@ void ParticleSystem::Update(float deltaTime, float wallDamping, bool enableSPH) 
 			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
 			glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssboPredPos);
-			BuildUniformGrid();
+			BuildUniformGrid(usePredictedPositionsFlag);
 
 
 
@@ -856,10 +880,10 @@ void ParticleSystem::Update(float deltaTime, float wallDamping, bool enableSPH) 
 				
 				
 
-				/*glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 8, ssboBoundaryCellCount);
+				glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 8, ssboBoundaryCellCount);
 				glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 9, ssboBoundaryCellStart);
 				glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 10, ssboBoundarySortedIndex);
-				glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 14, ssboBoundaryGhostParticles);*/
+				glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 15, ssboBoundaryGhostParticles);
 
 				if (!pbfLambdaComputeProgram) return;
 				pbfLambdaComputeProgram->use();
@@ -901,6 +925,9 @@ void ParticleSystem::Update(float deltaTime, float wallDamping, bool enableSPH) 
 				pbfApplyCorrComputeProgram->dispatch(groups, 1, 1);
 				glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
+				glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssboPredPos);
+				BuildUniformGrid(usePredictedPositionsFlag);
+
 				pbfIter++;
 			}
 
@@ -914,8 +941,13 @@ void ParticleSystem::Update(float deltaTime, float wallDamping, bool enableSPH) 
 			pbfIntegrateComputeProgram->setFloat("particleRadius", this->PARTICLE_SIM_RADIUS);
 			pbfIntegrateComputeProgram->setFloat("deltaTime", dtSub);
 			pbfIntegrateComputeProgram->setFloat("wallDamping", wallDamping);
+			pbfIntegrateComputeProgram->setFloat("velocityDamping", 0.985f);
+			pbfIntegrateComputeProgram->setFloat("maxVelocity", (h / glm::max(dtSub, 1e-6f)) * 1.25f);
 			pbfIntegrateComputeProgram->dispatch(groups, 1, 1);
 			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
+
+			//rebind
+			glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 8, ssboViscosityAccel);
 
 			if (!pbfXSPHComputeProgram) return;
 			pbfXSPHComputeProgram->use();

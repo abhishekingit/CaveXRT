@@ -9,10 +9,10 @@ layout(std430, binding = 6) buffer SortedIndex { uint sortedIndexBuf[]; };
 layout(std430, binding = 7) buffer ParticleDensities { float densityBuf[]; };
 layout(std430, binding = 11) buffer PredictedPositions { vec4 predictedPos[]; };
 layout(std430, binding = 12) buffer Lambdas { float lambdaBuf[]; };
-//layout(std430, binding = 8) readonly buffer BoundaryCellCount { uint boundaryCountBuf[]; };
-//layout(std430, binding = 9) readonly buffer BoundaryCellStart { uint boundaryStartBuf[]; };
-//layout(std430, binding = 10) readonly buffer BoundarySortedIndex { uint boundarySortedIndexBuf[]; };
-//layout(std430, binding = 15) readonly buffer BoundaryPos { vec4 boundaryGhostPart[]; };
+layout(std430, binding = 8) readonly buffer BoundaryCellCount { uint boundaryCountBuf[]; };
+layout(std430, binding = 9) readonly buffer BoundaryCellStart { uint boundaryStartBuf[]; };
+layout(std430, binding = 10) readonly buffer BoundarySortedIndex { uint boundarySortedIndexBuf[]; };
+layout(std430, binding = 15) readonly buffer BoundaryPos { vec4 boundaryGhostPart[]; };
 
 uniform uint particleCount;
 uniform uint gridResX;
@@ -90,46 +90,47 @@ void main() {
 		}
 
 	}
-////	for(int dz = -1; dz <= 1; dz++) {
-////		for(int dy = -1; dy <= 1; dy++) {
-////			for(int dx = -1; dx <= 1; dx++) {
-////				ivec3 c = base + ivec3(dx, dy, dz);
-////				if(c.x < 0 || c.y < 0 || c.z < 0) continue;
-////				if(c.x >= int(gridResX) || c.y >= int(gridResY) || c.z >= int(gridResZ)) continue;
-////
-////				uint nCell = flatten(c);
-////				uint bStart = boundaryStartBuf[nCell];
-////				uint bCount = boundaryCountBuf[nCell];
-////
-////				for(uint i = 0u; i < bCount; i++) {
-////					uint bIdx = boundarySortedIndexBuf[bStart + i];
-////					vec3 Pib = p - boundaryGhostPart[bIdx].xyz;
-////					float r = length(Pib);
-////					if(r >= h || r <= 1e-6) continue;
-////
-////					float w = boundaryGhostPart[bIdx].w;
-////					rho += w * W_Poly6(r, h);
-////
-////					vec3 gradCb = (w / restDensity) * gradW_spiky(Pib, r, h);
-////					gradCiSelf -= gradCb;
-////
-////				}
-////
-////
-////			}
-////
-////
-////
-////		}
-////
-////
-////
-////	}
+	for(int dz = -1; dz <= 1; dz++) {
+		for(int dy = -1; dy <= 1; dy++) {
+			for(int dx = -1; dx <= 1; dx++) {
+				ivec3 c = base + ivec3(dx, dy, dz);
+				if(c.x < 0 || c.y < 0 || c.z < 0) continue;
+				if(c.x >= int(gridResX) || c.y >= int(gridResY) || c.z >= int(gridResZ)) continue;
+
+				uint nCell = flatten(c);
+				uint bStart = boundaryStartBuf[nCell];
+				uint bCount = boundaryCountBuf[nCell];
+
+				for(uint i = 0u; i < bCount; i++) {
+					uint bIdx = boundarySortedIndexBuf[bStart + i];
+					vec3 Pib = p - boundaryGhostPart[bIdx].xyz;
+					float r = length(Pib);
+					if(r >= h || r <= 1e-6) continue;
+
+					float w = boundaryGhostPart[bIdx].w;
+					rho += w * W_Poly6(r, h);
+
+					vec3 gradCb = (w / restDensity) * gradW_spiky(Pib, r, h);
+					gradCiSelf -= gradCb;
+
+				}
+
+
+			}
+
+
+
+		}
+
+
+
+	}
 	densityBuf[idx] = rho;
 	sumGrad2 += dot(gradCiSelf, gradCiSelf);
 	float Ci = max(rho / restDensity - 1.0, 0.0);
-	//float Ci = rho / restDensity - 1.0;
-	lambdaBuf[idx] = -Ci / (sumGrad2 + relaxationEpsilon);
+	float denom = sumGrad2 + relaxationEpsilon;
+	float lambda = -Ci / denom;
+	lambdaBuf[idx] = lambda;
 
 
 }

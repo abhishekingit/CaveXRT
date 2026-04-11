@@ -87,12 +87,12 @@ private:
 	float viscosityCoeff;
 	float stiffness;
 
-	uint32_t pbfSolverIterations = 2;
-	float pbfScorrK = 0.0005f;
+	uint32_t pbfSolverIterations = 4;
+	float pbfScorrK = 0.00002f;
 	float pbfScorrN = 4.0f;
 	float pbfEpsilon = 1e-5f;
-	float pbfScorrDQ = 0.1f;
-	float pbfRelaxation = 0.6f;
+	float pbfScorrDQ = 0.2f;
+	float pbfRelaxation = 0.2f;
 	float vorticityEpsilon = 0.0f;
 	SpawnMode spawnMode = SpawnMode::Random;
 
@@ -178,7 +178,7 @@ private:
 
 	void InitializeGrid();
 	void InitializeBoundaryGhostParticles();
-	void BuildUniformGrid();
+	void BuildUniformGrid(bool usePredictedPositions);
 	void InitializeParticles();
 	//float ComputeCFLTimeStep(float dtMin, float dtMax);
 

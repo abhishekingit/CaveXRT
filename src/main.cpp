@@ -427,7 +427,7 @@ int main(int argc, char* argv[]) {
 	Shader fluidNarrowRangeShader("../../../src/Shaders/Particles/fluidRender/fluidCompositev.vert", "../../../src/Shaders/Particles/fluidRender/fluidNarrowRangefilter.frag");
 
 	ParticleSystem particleSystem(
-		80000,
+		50000,
 		simparticleRadius,
 		bboxMin,
 		bboxMax,
@@ -841,6 +841,10 @@ int main(int argc, char* argv[]) {
 		}
 
 		if (ImGui::CollapsingHeader("PBF parameters", ImGuiTreeNodeFlags_DefaultOpen)) {
+			if (ImGui::SliderFloat("PBF Relaxation", &uiPbfRelaxation, 0.05f, 1.0f, "%.3f")) {
+				particleSystem.SetPBFRelaxation(uiPbfRelaxation);
+			}
+
 			if (ImGui::DragFloat("SCorrK", &uiPbfScorrK, 0.00001f, 0.0f, 0.001f, "%.6f")) {
 				particleSystem.SetPBFCorrK(uiPbfScorrK);
 			}
