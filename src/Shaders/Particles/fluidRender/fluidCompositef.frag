@@ -83,7 +83,8 @@ void main() {
 	vec3 H = normalize(L + V);
 
 	float NDotL = max(dot(N, L), 0.0);
-	float spec = pow(max(dot(N, H), 0.0), shininess) * specularIntensity;
+	float wrappedNDotL = clamp((dot(N, L) + 0.35) / 1.35, 0.0, 1.0);
+	float spec = pow(max(dot(N, H), 0.0), max(8.0, shininess * 0.6)) * (specularIntensity * 1.25);
 
 //	float depthAtten = exp(-thickness * absorption);
 //	vec3 bodyColor = mix(deepColor, shallowColor, depthAtten);
@@ -127,6 +128,7 @@ void main() {
 	reflectionColor = mix(reflectionColor, planeReflectionColor, planarReflectionWeight);
 
 	float NDotV = clamp(dot(N, V), 0.0, 1.0);
+	float viewLift = pow(1.0 - NDotV, 1.5);
 	float fresnel = pow(1.0 - NDotV, fresnelPower);
 	//vec3 refractBlue = refractionColor * mix(vec3(1.0), bodyColor, 0.45);
 	vec3 refracted = planeRefractColor * transmittance * vec3(0.48, 0.82, 1.0);
@@ -135,10 +137,10 @@ void main() {
 	reflectionMix *= mix(0.55, 1.0, NDotV);
 
 	vec3 envColor = mix(refracted, reflectionColor, reflectionMix);
-	vec3 lit = envColor * (0.22 + 0.78 * NDotL) + vec3(spec);
+	vec3 lit = envColor * (0.34 + 0.66 * wrappedNDotL) + vec3(spec);
 	lit = mix(lit, lit * vec3(0.75, 0.85, 1.02), 0.20);
 
-	float diffuse = 0.35 + 0.65 * NDotL;
+	float diffuse = 0.48 + 0.52 * wrappedNDotL;
 
 	float thicknessMask = clamp(thickness * 0.12, 0.0, 1.0);
 	float edgeMask = 1.0 - thicknessMask;
@@ -148,6 +150,6 @@ void main() {
 //	edgeColor = mix(edgeColor, vec3(edgeLuma), edgeMask * 0.05);
 
 	float alpha = clamp(0.60 + thickness * 0.60, 0.38, 0.96);
-	vec3 finalColor = envColor * diffuse + vec3(spec) + vec3(0.03, 0.06, 0.10);
+	vec3 finalColor = envColor * diffuse + vec3(spec) + vec3(0.05, 0.09, 0.14) + envColor * (0.12 * viewLift);
 	FragColor = vec4(finalColor, alpha);
 }

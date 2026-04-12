@@ -30,14 +30,25 @@ vec3 colorParticles(uint id, vec3 res) {
 }
 
 vec3 densityRamp(float t) {
-	vec3 c0 = vec3(0.10, 0.30, 1.00);
-    vec3 c1 = vec3(0.10, 0.90, 1.00);
-    vec3 c2 = vec3(0.95, 0.90, 0.20);
-    vec3 c3 = vec3(1.00, 0.25, 0.20);
+	vec3 c0 = vec3(0.20, 0.06, 0.45);
+	vec3 c1 = vec3(0.18, 0.34, 0.75);
+	vec3 c2 = vec3(0.16, 0.62, 0.70);
+	vec3 c3 = vec3(0.58, 0.82, 0.38);
+	vec3 c4 = vec3(0.98, 0.83, 0.22);
+	vec3 c5 = vec3(0.97, 0.39, 0.20);
 
-    if (t < 0.33) return mix(c0, c1, t / 0.33);
-    if (t < 0.66) return mix(c1, c2, (t - 0.33) / 0.33);
-    return mix(c2, c3, (t - 0.66) / 0.34);
+	float s0 = smoothstep(0.00, 0.20, t);
+	float s1 = smoothstep(0.20, 0.40, t);
+	float s2 = smoothstep(0.40, 0.60, t);
+	float s3 = smoothstep(0.60, 0.80, t);
+	float s4 = smoothstep(0.80, 1.00, t);
+
+	vec3 col = mix(c0, c1, s0);
+	col = mix(col, c2, s1);
+	col = mix(col, c3, s2);
+	col = mix(col, c4, s3);
+	col = mix(col, c5, s4);
+	return col;
 
 }
 
@@ -64,7 +75,7 @@ void main() {
 		float dMin = densityMinMax.x;
 		float dMax = max(densityMinMax.y, dMin + 1e-6);
 		float t = clamp((ParticleDensity - dMin) / (dMax - dMin), 0.0, 1.0);
-		baseColor = densityRamp(t);
+		baseColor = densityRamp(smoothstep(0.0, 1.0, t));
 
 	}
 	else if(debugCellColor) {
@@ -75,9 +86,16 @@ void main() {
 	vec3 viewDir = normalize(-fragViewPos);
 	vec3 halfVec = normalize(lightDir + viewDir);
 
-	float diff = max(0.0, dot(normalViewSpace, lightDir));
-	float spec = pow(max(0.0, dot(normalViewSpace, halfVec)), 32.0);
-	vec3 color = baseColor * (0.1 + 0.9 * diff) + vec3(1.0) * spec;
+	float ndl = dot(normalViewSpace, lightDir);
+	float diff = clamp((ndl + 0.30) / 1.30, 0.0, 1.0);
+	float spec = pow(max(0.0, dot(normalViewSpace, halfVec)), 16.0);
+	float rim = pow(1.0 - max(0.0, dot(normalViewSpace, viewDir)), 2.0);
+
+	vec3 ambient = baseColor * 0.28;
+	vec3 diffuse = baseColor * (0.72 * diff);
+	vec3 specular = vec3(1.0) * (0.18 * spec);
+	vec3 rimLight = baseColor * (0.12 * rim);
+	vec3 color = ambient + diffuse + specular + rimLight;
 
 	FragColor = vec4(color, 1.0);
 }
