@@ -451,6 +451,8 @@ int main(int argc, char* argv[]) {
 	float uiPbfScorrDQ = particleSystem.GetPBFCorrDQ();
 	float uiPbfEpsilon = particleSystem.GetPBFEpsilon();
 	glm::vec3 uiGravity = particleSystem.GetGravity();
+	float uiMaxTimeStep = particleSystem.GetMaxTimeStep();
+	int uiParticleCount = static_cast<int>(particleSystem.GetMaxParticles());
 
 	bool uiEnableSPH = true;
 	bool uiSimulationRunning = false;
@@ -817,6 +819,15 @@ int main(int argc, char* argv[]) {
 		}
 		ImGui::SliderFloat("Particle render size", &uiParticleRenderSize, 1.0f, 30.0f);
 		ImGui::SliderFloat("Wall Damping", &uiWallDamping, 0.0f, 1.0f);
+		if (ImGui::SliderFloat("Max timestep", &uiMaxTimeStep, 1.0f / 240.0f, 1.0f / 30.0f, "%.5f")) {
+			particleSystem.SetMaxTimeStep(uiMaxTimeStep);
+		}
+		ImGui::Text("Current sim rate cap: %.1f Hz", 1.0f / particleSystem.GetMaxTimeStep());
+		ImGui::SetNextItemWidth(180.0f);
+		ImGui::SliderInt("Particle Count", &uiParticleCount, 5000, 200000);
+		if (ImGui::Button("Apply Particle Count")) {
+			particleSystem.SetMaxParticles(static_cast<size_t>(uiParticleCount), true);
+		}
 		if (ImGui::DragFloat3("Gravity", &uiGravity.x, 0.05f, -30.0f, 30.0f, "%.2f")) {
 			particleSystem.SetGravity(uiGravity);
 		}

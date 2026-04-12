@@ -37,6 +37,7 @@ public:
 	SpawnMode GetSpawnMode() const { return spawnMode; }
 
 	void SetBounds(const glm::vec3& gridMin, const glm::vec3& gridMax, bool rebuild = true, bool reinitializeParticles = true);
+	void SetMaxParticles(size_t count, bool reinitialize = true);
 
 	void SetRestDensity(float restDensity) { this->restDensity = restDensity; }
 	void SetViscosityCoeff(float viscosityCoeff) { this->viscosityCoeff = viscosityCoeff; }
@@ -49,6 +50,7 @@ public:
 	void SetPBFCorrN(float n) { this->pbfScorrN = n; }
 	void SetPBFCorrDQ(float dq) { this->pbfScorrDQ = dq; }
 	void SetPBFEpsilon(float epsilon) { this->pbfEpsilon = epsilon; }
+	void SetMaxTimeStep(float maxDt) { this->maxTimeStep = glm::max(maxDt, 1e-5f); }
 
 	float GetRestDensity() const { return restDensity; }
 	float GetViscosityCoeff() const { return viscosityCoeff; }
@@ -61,6 +63,8 @@ public:
 	float GetPBFCorrN() const{ return pbfScorrN; }
 	float GetPBFCorrDQ() const{ return pbfScorrDQ; }
 	float GetPBFEpsilon() const{ return pbfEpsilon; }
+	float GetMaxTimeStep() const { return maxTimeStep; }
+	size_t GetMaxParticles() const { return maxParticles; }
 
 	glm::vec3 GetGridMin() const { return GRID_MIN; }
 	glm::vec3 GetGridMax() const { return GRID_MAX; }
@@ -95,6 +99,7 @@ private:
 	float pbfRelaxation = 0.2f;
 	float vorticityEpsilon = 0.0f;
 	SpawnMode spawnMode = SpawnMode::Random;
+	float maxTimeStep = 1.0f / 120.0f;
 
 	uint32_t ssboPos = 0;
 	uint32_t ssboVel = 0;

@@ -419,38 +419,57 @@ void ParticleSystem::BuildUniformGrid(bool usePredictedPositions) {
 	gridParticleCountProgram->dispatch(particleGroups, 1, 1);
 	glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
-	std::vector<uint32_t> counts(GRID_VOXEL_COUNT);
-	std::vector<uint32_t> offsets(GRID_VOXEL_COUNT);
-	uint32_t particleProcessed = 0;
+	constexpr bool useGpuPrefixScan = false;
 
-	glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssboCellCount);
+	if (useGpuPrefixScan) {
+		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 15, ssboGridBlockSums);
 
-	//GPU Prefix scan
-	/*glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 15, ssboGridBlockSums);
+		gridPrefixScanProgram->use();
+		gridPrefixScanProgram->setUint("elementCount", GRID_VOXEL_COUNT);
+		gridPrefixScanProgram->dispatch(scanGroupCount, 1, 1);
+		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
-	gridPrefixScanProgram->use();
-	gridPrefixScanProgram->setUint("elementCount", GRID_VOXEL_COUNT);
-	gridPrefixScanProgram->dispatch(scanGroupCount, 1, 1);
-	glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+		gridPrefixBlockSumProgram->use();
+		gridPrefixBlockSumProgram->setUint("blockCount", scanGroupCount);
+		gridPrefixBlockSumProgram->dispatch(1, 1, 1);
+		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
-	gridPrefixBlockSumProgram->use();
-	gridPrefixBlockSumProgram->setUint("blockCount", scanGroupCount);
-	gridPrefixBlockSumProgram->dispatch(1, 1, 1);
-	glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+		gridPrefixAddProgram->use();
+		gridPrefixAddProgram->setUint("elementCount", GRID_VOXEL_COUNT);
+		gridPrefixAddProgram->dispatch(scanGroupCount, 1, 1);
+		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
-	gridPrefixAddProgram->use();
-	gridPrefixAddProgram->setUint("elementCount", GRID_VOXEL_COUNT);
-	gridPrefixAddProgram->dispatch(scanGroupCount, 1, 1);
-	glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+		gridCopyOffsetWriteProgram->use();
+		gridCopyOffsetWriteProgram->setUint("elementCount", GRID_VOXEL_COUNT);
+		gridCopyOffsetWriteProgram->dispatch(divUp(GRID_VOXEL_COUNT, 256u), 1, 1);
+		glMemoryBarrier(
+			GL_SHADER_STORAGE_BARRIER_BIT |
+			GL_BUFFER_UPDATE_BARRIER_BIT |
+			GL_ATOMIC_COUNTER_BARRIER_BIT
+		);
+	}
+	else {
+		std::vector<uint32_t> counts(GRID_VOXEL_COUNT);
+		std::vector<uint32_t> offsets(GRID_VOXEL_COUNT);
+		uint32_t particleProcessed = 0;
 
-	gridCopyOffsetWriteProgram->use();
-	gridCopyOffsetWriteProgram->setUint("elementCount", GRID_VOXEL_COUNT);
-	gridCopyOffsetWriteProgram->dispatch(divUp(GRID_VOXEL_COUNT, 256u), 1, 1);
-	glMemoryBarrier(
-		GL_SHADER_STORAGE_BARRIER_BIT |
-		GL_BUFFER_UPDATE_BARRIER_BIT |
-		GL_ATOMIC_COUNTER_BARRIER_BIT
-	);*/
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssboCellCount);
+		glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, counts.size() * sizeof(uint32_t), counts.data());
+
+		for (uint32_t i = 0; i < GRID_VOXEL_COUNT; i++) {
+			offsets[i] = particleProcessed;
+			particleProcessed += counts[i];
+		}
+
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssboCellOffset);
+		glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, offsets.size() * sizeof(uint32_t), offsets.data());
+
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssboCellWrite);
+		glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, offsets.size() * sizeof(uint32_t), offsets.data());
+
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+	}
 
 	/*glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssboCellCount);
 	glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, counts.size() * sizeof(uint32_t), counts.data());
@@ -493,21 +512,7 @@ void ParticleSystem::BuildUniformGrid(bool usePredictedPositions) {
 		std::cout << "[ScanCheck] FAILED\n";
 	}*/
 
-	glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, counts.size() * sizeof(uint32_t), counts.data());
 
-	for (uint32_t i = 0; i < GRID_VOXEL_COUNT; i++) {
-		offsets[i] = particleProcessed;
-		particleProcessed += counts[i];
-	}
-
-	glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssboCellOffset);
-	glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, offsets.size() * sizeof(uint32_t), offsets.data());
-
-	glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssboCellWrite);
-	glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, offsets.size() * sizeof(uint32_t), offsets.data());
-
-	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
-	glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, usePredictedPositions ? ssboPredPos : ssboPos);
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, ssboVel);
@@ -524,6 +529,16 @@ void ParticleSystem::BuildUniformGrid(bool usePredictedPositions) {
 
 void ParticleSystem::SetSpawnMode(SpawnMode mode, bool reinitialize) {
 	spawnMode = mode;
+	if (reinitialize) {
+		InitializeParticles();
+	}
+}
+
+void ParticleSystem::SetMaxParticles(size_t count, bool reinitialize) {
+	if (count == 0 || count == maxParticles) return;
+	maxParticles = count;
+	particles.resize(maxParticles);
+	InitializeGrid();
 	if (reinitialize) {
 		InitializeParticles();
 	}
@@ -775,7 +790,8 @@ void ParticleSystem::InitializeParticles() {
 
 void ParticleSystem::Update(float deltaTime, float wallDamping, bool enableSPH) {
 	uint32_t groups = (maxParticles + workGroupSize - 1) / workGroupSize;
-	const float dt = std::min(deltaTime, 1.0f / 120.0f);
+	//const float dt = std::min(deltaTime, 1.0f / 120.0f);
+	const float dt = std::min(deltaTime, maxTimeStep);
 	
 	//smoothing kernel radius
 	const float h = GRID_CELL_SIZE;
@@ -786,6 +802,41 @@ void ParticleSystem::Update(float deltaTime, float wallDamping, bool enableSPH) 
 	const float mass = this->restDensity * dx * dx * dx;
 	const int substeps = 2;
 	bool usePredictedPositionsFlag = !enableSPH;
+
+	//GPU Compute passes Profiling
+	constexpr bool EnablePbfGpuTimers = true;
+	enum PbfTimerSlot {
+		PBF_PREDICT = 0,
+		PBF_GRID_PRE,
+		PBF_LAMBDA,
+		PBF_DELTA,
+		PBF_APPLY,
+		PBF_GRID_ITER,
+		PBF_INTEGRATE,
+		PBF_XSPH,
+		PBF_XSPH_APPLY,
+		PBF_VORT,
+		PBF_VORT_APPLY,
+		PBF_TIMER_COUNT
+	};
+	static double pbfTimerMs[PBF_TIMER_COUNT] = { 0.0 };
+	static int pbfTimerFrames = 0;
+
+	auto timePbfGpu = [&](int slot, auto&& dispatchCall) {
+		if (!EnablePbfGpuTimers) {
+			dispatchCall();
+			return;
+		}
+		GLuint query = 0;
+		glGenQueries(1, &query);
+		glBeginQuery(GL_TIME_ELAPSED, query);
+		dispatchCall();
+		glEndQuery(GL_TIME_ELAPSED);
+		GLuint64 ns = 0;
+		glGetQueryObjectui64v(query, GL_QUERY_RESULT, &ns);
+		glDeleteQueries(1, &query);
+		pbfTimerMs[slot] += double(ns) / 1e6;
+	};
 	//const float mass = 0.8 * pow(dx, 3) * this->restDensity;
 
 	
@@ -845,6 +896,7 @@ void ParticleSystem::Update(float deltaTime, float wallDamping, bool enableSPH) 
 		//pbf 
 		for (int s = 0; s < substeps; s++) {
 			const float dtSub = dt / float(substeps);
+			const bool runSecondaryPasses = ((s & 1) == 0);
 
 			//glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 8, ssboViscosityAccel);
 			//for toggling
@@ -866,11 +918,15 @@ void ParticleSystem::Update(float deltaTime, float wallDamping, bool enableSPH) 
 			pbfPredictPosComputeProgram->setFloat("particleRadius", this->PARTICLE_SIM_RADIUS);
 			pbfPredictPosComputeProgram->setVec3("gravity", this->GRAVITY);
 			pbfPredictPosComputeProgram->setFloat("wallDamping", wallDamping);
-			pbfPredictPosComputeProgram->dispatch(groups, 1, 1);
-			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+			timePbfGpu(PBF_PREDICT, [&]() {
+				pbfPredictPosComputeProgram->dispatch(groups, 1, 1);
+				glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+			});
 
 			glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssboPredPos);
-			BuildUniformGrid(usePredictedPositionsFlag);
+			timePbfGpu(PBF_GRID_PRE, [&]() {
+				BuildUniformGrid(usePredictedPositionsFlag);
+			});
 
 
 
@@ -896,8 +952,10 @@ void ParticleSystem::Update(float deltaTime, float wallDamping, bool enableSPH) 
 				pbfLambdaComputeProgram->setFloat("PI", this->PI);
 				pbfLambdaComputeProgram->setFloat("restDensity", this->restDensity);
 				pbfLambdaComputeProgram->setFloat("relaxationEpsilon", this->pbfEpsilon);
-				pbfLambdaComputeProgram->dispatch(groups, 1, 1);
-				glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+				timePbfGpu(PBF_LAMBDA, [&]() {
+					pbfLambdaComputeProgram->dispatch(groups, 1, 1);
+					glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+				});
 
 				if (!pbfDeltaPosComputeProgram) return;
 				pbfDeltaPosComputeProgram->use();
@@ -912,8 +970,10 @@ void ParticleSystem::Update(float deltaTime, float wallDamping, bool enableSPH) 
 				pbfDeltaPosComputeProgram->setFloat("scorrK", this->pbfScorrK);
 				pbfDeltaPosComputeProgram->setFloat("scorrN", this->pbfScorrN);
 				pbfDeltaPosComputeProgram->setFloat("scorrDQ", this->pbfScorrDQ);
-				pbfDeltaPosComputeProgram->dispatch(groups, 1, 1);
-				glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+				timePbfGpu(PBF_DELTA, [&]() {
+					pbfDeltaPosComputeProgram->dispatch(groups, 1, 1);
+					glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+				});
 
 				if (!pbfApplyCorrComputeProgram) return;
 				pbfApplyCorrComputeProgram->use();
@@ -922,11 +982,15 @@ void ParticleSystem::Update(float deltaTime, float wallDamping, bool enableSPH) 
 				pbfApplyCorrComputeProgram->setVec3("boxMax", this->GRID_MAX);
 				pbfApplyCorrComputeProgram->setFloat("particleRadius", this->PARTICLE_SIM_RADIUS);
 				pbfApplyCorrComputeProgram->setFloat("pbfRelaxation", this->pbfRelaxation);
-				pbfApplyCorrComputeProgram->dispatch(groups, 1, 1);
-				glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+				timePbfGpu(PBF_APPLY, [&]() {
+					pbfApplyCorrComputeProgram->dispatch(groups, 1, 1);
+					glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+				});
 
 				glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssboPredPos);
-				BuildUniformGrid(usePredictedPositionsFlag);
+				timePbfGpu(PBF_GRID_ITER, [&]() {
+					BuildUniformGrid(usePredictedPositionsFlag);
+				});
 
 				pbfIter++;
 			}
@@ -943,58 +1007,70 @@ void ParticleSystem::Update(float deltaTime, float wallDamping, bool enableSPH) 
 			pbfIntegrateComputeProgram->setFloat("wallDamping", wallDamping);
 			pbfIntegrateComputeProgram->setFloat("velocityDamping", 0.985f);
 			pbfIntegrateComputeProgram->setFloat("maxVelocity", (h / glm::max(dtSub, 1e-6f)) * 1.25f);
-			pbfIntegrateComputeProgram->dispatch(groups, 1, 1);
-			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
+			timePbfGpu(PBF_INTEGRATE, [&]() {
+				pbfIntegrateComputeProgram->dispatch(groups, 1, 1);
+				glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
+			});
 
-			//rebind
-			glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 8, ssboViscosityAccel);
+			if (runSecondaryPasses) {
+				//rebind
+				glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 8, ssboViscosityAccel);
 
-			if (!pbfXSPHComputeProgram) return;
-			pbfXSPHComputeProgram->use();
-			pbfXSPHComputeProgram->setUint("particleCount", maxParticles);
-			pbfXSPHComputeProgram->setUint("gridResX", static_cast<uint32_t>(GRID_RES.x));
-			pbfXSPHComputeProgram->setUint("gridResY", static_cast<uint32_t>(GRID_RES.y));
-			pbfXSPHComputeProgram->setUint("gridResZ", static_cast<uint32_t>(GRID_RES.z));
-			pbfXSPHComputeProgram->setFloat("h", h);
-			pbfXSPHComputeProgram->setFloat("mass", mass);
-			pbfXSPHComputeProgram->setFloat("PI", this->PI);
-			pbfXSPHComputeProgram->setFloat("restDensity", this->restDensity);
-			pbfXSPHComputeProgram->setFloat("viscosityCoeff", this->viscosityCoeff);
-			pbfXSPHComputeProgram->dispatch(groups, 1, 1);
-			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+				if (!pbfXSPHComputeProgram) return;
+				pbfXSPHComputeProgram->use();
+				pbfXSPHComputeProgram->setUint("particleCount", maxParticles);
+				pbfXSPHComputeProgram->setUint("gridResX", static_cast<uint32_t>(GRID_RES.x));
+				pbfXSPHComputeProgram->setUint("gridResY", static_cast<uint32_t>(GRID_RES.y));
+				pbfXSPHComputeProgram->setUint("gridResZ", static_cast<uint32_t>(GRID_RES.z));
+				pbfXSPHComputeProgram->setFloat("h", h);
+				pbfXSPHComputeProgram->setFloat("mass", mass);
+				pbfXSPHComputeProgram->setFloat("PI", this->PI);
+				pbfXSPHComputeProgram->setFloat("restDensity", this->restDensity);
+				pbfXSPHComputeProgram->setFloat("viscosityCoeff", this->viscosityCoeff);
+				timePbfGpu(PBF_XSPH, [&]() {
+					pbfXSPHComputeProgram->dispatch(groups, 1, 1);
+					glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+				});
 
-			if (!pbfXSPHApplyComputeProgram) return;
-			pbfXSPHApplyComputeProgram->use();
-			pbfXSPHApplyComputeProgram->setUint("particleCount", maxParticles);
-			pbfXSPHApplyComputeProgram->dispatch(groups, 1, 1);
-			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
+				if (!pbfXSPHApplyComputeProgram) return;
+				pbfXSPHApplyComputeProgram->use();
+				pbfXSPHApplyComputeProgram->setUint("particleCount", maxParticles);
+				timePbfGpu(PBF_XSPH_APPLY, [&]() {
+					pbfXSPHApplyComputeProgram->dispatch(groups, 1, 1);
+					glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
+				});
 
-			if (!pbfVorticityComputeProgram) return;
-			pbfVorticityComputeProgram->use();
-			pbfVorticityComputeProgram->setUint("particleCount", maxParticles);
-			pbfVorticityComputeProgram->setUint("gridResX", static_cast<uint32_t>(GRID_RES.x));
-			pbfVorticityComputeProgram->setUint("gridResY", static_cast<uint32_t>(GRID_RES.y));
-			pbfVorticityComputeProgram->setUint("gridResZ", static_cast<uint32_t>(GRID_RES.z));
-			pbfVorticityComputeProgram->setFloat("h", h);
-			pbfVorticityComputeProgram->setFloat("mass", mass);
-			pbfVorticityComputeProgram->setFloat("PI", this->PI);
-			pbfVorticityComputeProgram->setFloat("restDensity", this->restDensity);
-			pbfVorticityComputeProgram->dispatch(groups, 1, 1);
-			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+				if (!pbfVorticityComputeProgram) return;
+				pbfVorticityComputeProgram->use();
+				pbfVorticityComputeProgram->setUint("particleCount", maxParticles);
+				pbfVorticityComputeProgram->setUint("gridResX", static_cast<uint32_t>(GRID_RES.x));
+				pbfVorticityComputeProgram->setUint("gridResY", static_cast<uint32_t>(GRID_RES.y));
+				pbfVorticityComputeProgram->setUint("gridResZ", static_cast<uint32_t>(GRID_RES.z));
+				pbfVorticityComputeProgram->setFloat("h", h);
+				pbfVorticityComputeProgram->setFloat("mass", mass);
+				pbfVorticityComputeProgram->setFloat("PI", this->PI);
+				pbfVorticityComputeProgram->setFloat("restDensity", this->restDensity);
+				timePbfGpu(PBF_VORT, [&]() {
+					pbfVorticityComputeProgram->dispatch(groups, 1, 1);
+					glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+				});
 
-			if (!pbfVorticityApplyComputeProgram) return;
-			pbfVorticityApplyComputeProgram->use();
-			pbfVorticityApplyComputeProgram->setUint("particleCount", maxParticles);
-			pbfVorticityApplyComputeProgram->setUint("gridResX", static_cast<uint32_t>(GRID_RES.x));
-			pbfVorticityApplyComputeProgram->setUint("gridResY", static_cast<uint32_t>(GRID_RES.y));
-			pbfVorticityApplyComputeProgram->setUint("gridResZ", static_cast<uint32_t>(GRID_RES.z));
-			pbfVorticityApplyComputeProgram->setFloat("h", h);
-			pbfVorticityApplyComputeProgram->setFloat("mass", mass);
-			pbfVorticityApplyComputeProgram->setFloat("PI", this->PI);
-			pbfVorticityApplyComputeProgram->setFloat("deltaTime", dtSub);
-			pbfVorticityApplyComputeProgram->setFloat("vorticityEpsilon", this->vorticityEpsilon);
-			pbfVorticityApplyComputeProgram->dispatch(groups, 1, 1);
-			glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);	
+				if (!pbfVorticityApplyComputeProgram) return;
+				pbfVorticityApplyComputeProgram->use();
+				pbfVorticityApplyComputeProgram->setUint("particleCount", maxParticles);
+				pbfVorticityApplyComputeProgram->setUint("gridResX", static_cast<uint32_t>(GRID_RES.x));
+				pbfVorticityApplyComputeProgram->setUint("gridResY", static_cast<uint32_t>(GRID_RES.y));
+				pbfVorticityApplyComputeProgram->setUint("gridResZ", static_cast<uint32_t>(GRID_RES.z));
+				pbfVorticityApplyComputeProgram->setFloat("h", h);
+				pbfVorticityApplyComputeProgram->setFloat("mass", mass);
+				pbfVorticityApplyComputeProgram->setFloat("PI", this->PI);
+				pbfVorticityApplyComputeProgram->setFloat("deltaTime", dtSub);
+				pbfVorticityApplyComputeProgram->setFloat("vorticityEpsilon", this->vorticityEpsilon);
+				timePbfGpu(PBF_VORT_APPLY, [&]() {
+					pbfVorticityApplyComputeProgram->dispatch(groups, 1, 1);
+					glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);	
+				});
+			}
 
 
 
@@ -1003,6 +1079,30 @@ void ParticleSystem::Update(float deltaTime, float wallDamping, bool enableSPH) 
 
 		
 
+		if (EnablePbfGpuTimers) {
+			pbfTimerFrames++;
+			if (pbfTimerFrames >= 60) {
+				const char* names[PBF_TIMER_COUNT] = {
+					"PBF Predict",
+					"PBF Grid (pre)",
+					"PBF Lambda",
+					"PBF DeltaPos",
+					"PBF ApplyCorr",
+					"PBF Grid (iter)",
+					"PBF Integrate",
+					"PBF XSPH",
+					"PBF XSPH Apply",
+					"PBF Vorticity",
+					"PBF Vorticity Apply"
+				};
+				std::cout << "[PBF GPU Timers] avg ms over " << pbfTimerFrames << " frames:\n";
+				for (int i = 0; i < PBF_TIMER_COUNT; ++i) {
+					std::cout << "  - " << names[i] << ": " << (pbfTimerMs[i] / double(pbfTimerFrames)) << " ms\n";
+					pbfTimerMs[i] = 0.0;
+				}
+				pbfTimerFrames = 0;
+			}
+		}
 	}
 
 }
