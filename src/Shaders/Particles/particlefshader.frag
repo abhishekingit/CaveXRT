@@ -52,6 +52,11 @@ vec3 densityRamp(float t) {
 
 }
 
+vec3 safeNormalize(vec3 v) {
+	float m2 = dot(v, v);
+	return (m2 > 1e-8) ? v * inversesqrt(m2) : vec3(0.0, 0.0, 1.0);
+}
+
 void main() {
 	//centered coords and sphere like normals for billboard particles
 	vec2 coord = (gl_PointCoord - vec2(0.5)) * 2.0;
@@ -84,7 +89,7 @@ void main() {
 
 	vec3 lightDir = normalize(lightPosView - fragViewPos);
 	vec3 viewDir = normalize(-fragViewPos);
-	vec3 halfVec = normalize(lightDir + viewDir);
+	vec3 halfVec = safeNormalize(lightDir + viewDir);
 
 	float ndl = dot(normalViewSpace, lightDir);
 	float diff = clamp((ndl + 0.30) / 1.30, 0.0, 1.0);

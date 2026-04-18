@@ -822,7 +822,7 @@ int main(int argc, char* argv[]) {
 		if (ImGui::SliderFloat("Max timestep", &uiMaxTimeStep, 1.0f / 240.0f, 1.0f / 30.0f, "%.5f")) {
 			particleSystem.SetMaxTimeStep(uiMaxTimeStep);
 		}
-		ImGui::Text("Current sim rate cap: %.1f Hz", 1.0f / particleSystem.GetMaxTimeStep());
+		ImGui::Text("Sim Timestep: %.1f fps", 1.0f / particleSystem.GetMaxTimeStep());
 		ImGui::SetNextItemWidth(180.0f);
 		ImGui::SliderInt("Particle Count", &uiParticleCount, 5000, 200000);
 		if (ImGui::Button("Apply Particle Count")) {
