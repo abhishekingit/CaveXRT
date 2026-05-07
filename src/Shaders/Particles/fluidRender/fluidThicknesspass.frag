@@ -11,8 +11,7 @@ void main() {
 		discard;
 	}
 
-	float z = sqrt(1.0 - r2);
-
+	float z = sqrt(max(0.0, 1.0 - r2));
 	FluidThickness = 2.0 * RadiusView * z;
 
 }

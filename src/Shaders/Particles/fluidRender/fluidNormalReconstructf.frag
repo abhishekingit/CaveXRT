@@ -15,6 +15,10 @@ vec3 reconstructViewPos(vec2 uv, float linearDepth) {
 	return vec3(x, y, -linearDepth);
 }
 
+bool isFinite3(vec3 v) {
+	return all(equal(v, v)) && all(lessThan(abs(v), vec3(1e19)));
+}
+
 void main() {
 	float depthC = texture(fluidDepthTexture, vUV).r;
 	float thickness = texture(fluidThicknessTexture, vUV).r;
@@ -45,9 +49,20 @@ void main() {
 	vec3 pD = reconstructViewPos(uvD, dD);
 	vec3 pU = reconstructViewPos(uvU, dU);
 
-	vec3 dx = (pR - pL);
-	vec3 dy = (pU - pD);
-	vec3 N = normalize(cross(dx, dy));
+	vec3 dxl = pC - pL;
+	vec3 dxr = pR - pC;
+	vec3 dyb = pC - pD;
+	vec3 dyt = pU - pC;
+
+	vec3 dx = (abs(dxr.z) < abs(dxl.z)) ? dxr : dxl;
+	vec3 dy = (abs(dyt.z) < abs(dyb.z)) ? dyt : dyb;
+
+	vec3 nRaw = cross(dx, dy);
+	float nLen2 = dot(nRaw, nRaw);
+	vec3 N = (nLen2 > 1e-12) ? (nRaw * inversesqrt(nLen2)) : vec3(0.0, 0.0, -1.0);
+	if (!isFinite3(N)) {
+		N = vec3(0.0, 0.0, -1.0);
+	}
 	if (N.z > 0.0) {
 		N = -N;
 	}

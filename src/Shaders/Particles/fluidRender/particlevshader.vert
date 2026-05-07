@@ -36,9 +36,11 @@ void main() {
    
     float proj11 = projection[1][1];
 
+    float particleRadius = pointSize;
+
     
-    float pixelDiameter = max(1.0, pointSize);
-    RadiusView = pixelDiameter * dist / (proj11 * viewportSize.y);
+    float pixelDiameter = particleRadius * proj11 * viewportSize.y / dist;
+    RadiusView = particleRadius;
 
     CellID = particleCell[gl_VertexID];
     ParticleDensity = densityBuf[gl_VertexID];

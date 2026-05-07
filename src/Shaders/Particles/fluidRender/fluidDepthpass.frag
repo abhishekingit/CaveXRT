@@ -14,8 +14,8 @@ void main() {
 		discard;
 	}
 
-	float z = sqrt(1.0 - r2);
-	vec3 normalView = normalize(vec3(coord.x, coord.y, z));
+	float z = sqrt(max(0.0, 1.0 - r2));
+	vec3 normalView = vec3(coord.x, coord.y, z);
 
 	vec3 fragViewPos = ViewPos + normalView * RadiusView;
 

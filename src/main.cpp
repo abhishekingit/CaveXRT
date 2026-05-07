@@ -456,7 +456,7 @@ int main(int argc, char* argv[]) {
 
 	bool uiEnableSPH = true;
 	bool uiSimulationRunning = false;
-	float uiParticleRenderSize = 12.0f;
+	float uiParticleRenderSize = 0.03f;
 	float uiWallDamping = 0.5f;
 	bool uiEnableParticles = false;
 
@@ -817,7 +817,7 @@ int main(int argc, char* argv[]) {
 		if (ImGui::Button("Step")) {
 			particleSystem.Update(1.0f / 60.0f, uiWallDamping, uiEnableSPH);
 		}
-		ImGui::SliderFloat("Particle render size", &uiParticleRenderSize, 1.0f, 30.0f);
+		ImGui::SliderFloat("Particle render size", &uiParticleRenderSize, 0.005f, 0.9f);
 		ImGui::SliderFloat("Wall Damping", &uiWallDamping, 0.0f, 1.0f);
 		if (ImGui::SliderFloat("Max timestep", &uiMaxTimeStep, 1.0f / 240.0f, 1.0f / 30.0f, "%.5f")) {
 			particleSystem.SetMaxTimeStep(uiMaxTimeStep);
@@ -1040,6 +1040,7 @@ int main(int argc, char* argv[]) {
 			fluidRenderTarget.Bind();
 			glViewport(0, 0, fluidRenderTarget.Width(), fluidRenderTarget.Height());
 
+			//glClearBufferv() works differently on different GPUs fixed the bug
 			//DepthPass for Fluid surface rendering
 			glDrawBuffer(GL_COLOR_ATTACHMENT0);
 			const float clearDepthVal = 0.0f;
@@ -1053,7 +1054,7 @@ int main(int argc, char* argv[]) {
 			//ThicknessPass for Fluid surface rendering
 			glDrawBuffer(GL_COLOR_ATTACHMENT1);
 			const float clearThicknessVal = 0.0f;
-			glClearBufferfv(GL_COLOR, 1, &clearThicknessVal);
+			glClearBufferfv(GL_COLOR, 0, &clearThicknessVal);
 			glEnable(GL_BLEND);
 			glBlendFunc(GL_ONE, GL_ONE);
 
@@ -1206,7 +1207,7 @@ int main(int argc, char* argv[]) {
 			glReadBuffer(GL_NONE);
 			glViewport(0, 0, fluidRenderTarget.Width(), fluidRenderTarget.Height());
 			const float clearNormal[4]{ 0.0f, 0.0f, 0.0f, 0.0f };
-			glClearBufferfv(GL_COLOR, 2, clearNormal);
+			glClearBufferfv(GL_COLOR, 0, clearNormal);
 			glDisable(GL_BLEND);
 			glDisable(GL_DEPTH_TEST);
 
@@ -1237,7 +1238,7 @@ int main(int argc, char* argv[]) {
 			fluidRenderShader.setVec2("texelSize", glm::vec2(1.0f / framebufferWidth, 1.0f / framebufferHeight));
 			fluidRenderShader.setMat4("projection", perspectiveProjection);
 			fluidRenderShader.setMat4("inverseView", glm::inverse(view));
-			fluidRenderShader.setVec3("absorption", glm::vec3(3.5, 1.2, 0.30));
+			fluidRenderShader.setVec3("absorption", glm::vec3(1.4, 0.55, 0.20));
 			fluidRenderShader.setFloat("refractionStrength", 0.95f);
 			fluidRenderShader.setFloat("specularIntensity", 0.7f);
 			fluidRenderShader.setFloat("shininess", 80.0f);
@@ -1249,6 +1250,7 @@ int main(int argc, char* argv[]) {
 			fluidRenderShader.setFloat("planeHalfExtent", 4.0f);
 			fluidRenderShader.setVec3("shallowColor", glm::vec3(0.32, 0.68, 1.00));
 			fluidRenderShader.setVec3("deepColor", glm::vec3(0.03, 0.18, 0.56));
+			fluidRenderShader.setFloat("thicknessEpsilon", 1e-4f);
 			glActiveTexture(GL_TEXTURE0);
 			glBindTexture(GL_TEXTURE_2D, depthForComposite);
 			fluidRenderShader.setInt("fluidDepthTexture", 0);

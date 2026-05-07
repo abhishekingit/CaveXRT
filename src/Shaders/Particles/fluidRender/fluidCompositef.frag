@@ -177,9 +177,25 @@ void main() {
 		+ vec3(0.08, 0.14, 0.20)
 		+ refracted * 0.22
 		+ envColor * (0.08 * viewLift)
-		+ bodyColor * 0.10;
+		+ bodyColor * 0.30;
 
 	// fluid-only gamma lift to avoid dark-blue collapse on some GPUs without touching whole window
-	finalColor = pow(max(finalColor, vec3(0.0)), vec3(0.92));
-	FragColor = vec4(finalColor, alpha);
+	//finalColor = pow(max(finalColor, vec3(0.0)), vec3(0.92));
+
+	
+
+
+	//thickness debug
+//	float debugThickness = texture(fluidThicknessTexture, vUV).r;
+//	float vis = debugThickness * 0.2; 
+//	vis = 1.0 - exp(-debugThickness * 2.0);
+//	FragColor = vec4(vec3(vis), 1.0);
+
+	//depth debug
+//	float debugDepth = texture(fluidDepthTexture, vUV).r;
+//	float vis = debugDepth * 0.02;
+//	FragColor = vec4(vec3(vis), 1.0);
+//
+
+   FragColor = vec4(finalColor, alpha);
 }

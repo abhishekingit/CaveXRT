@@ -17,11 +17,6 @@ void main() {
 	if(idx >= particleCount) return;
 	//temporary correction modification
 	vec3 corr = pbfRelaxation * deltaPosBuf[idx].xyz;
-	float maxCorr = particleRadius * 0.5;
-	float corrLen = length(corr);
-	if(corrLen > maxCorr) {
-		corr *= (maxCorr / corrLen);
-	}
 
 	vec3 Pi = predictedPos[idx].xyz + corr;
 
