@@ -17,6 +17,7 @@
 #include "RenderTarget.h"
 #include "ParticleSystem.h"
 #include "FluidRenderTarget.h"
+#include "VideoRecorder.h"
 
 
 
@@ -426,6 +427,8 @@ int main(int argc, char* argv[]) {
 	Shader fluidNormalReconstructShader("../../../src/Shaders/Particles/fluidRender/fluidCompositev.vert", "../../../src/Shaders/Particles/fluidRender/fluidNormalReconstructf.frag");
 	Shader fluidNarrowRangeShader("../../../src/Shaders/Particles/fluidRender/fluidCompositev.vert", "../../../src/Shaders/Particles/fluidRender/fluidNarrowRangefilter.frag");
 
+	VideoRecorder videoRecorder(caveXRTConfig.width, caveXRTConfig.height, 120, "CaveXRTFluidSim.mp4");
+
 	ParticleSystem particleSystem(
 		50000,
 		simparticleRadius,
@@ -436,6 +439,7 @@ int main(int argc, char* argv[]) {
 		"../../../src/Shaders/Particles/particlefshader.frag");
 
 	particleSystem.SetSpawnMode(ParticleSystem::SpawnMode::DoubleDam, true);
+
 
 	glm::vec3 uiBoxMin = particleSystem.GetGridMin();
 	glm::vec3 uiBoxMax = particleSystem.GetGridMax();
@@ -825,6 +829,24 @@ int main(int argc, char* argv[]) {
 		ImGui::Text("Sim Timestep: %.1f fps", 1.0f / particleSystem.GetMaxTimeStep());
 		ImGui::SetNextItemWidth(180.0f);
 		ImGui::SliderInt("Particle Count", &uiParticleCount, 5000, 200000);
+
+		ImGui::SeparatorText("Video Capture");
+
+		if (!videoRecorder.IsRecording()) {
+			if (ImGui::Button("Start Recording")) {
+				if (!videoRecorder.StartRecording()) {
+					std::cout << "Failed to start video recording" << std::endl;
+				}
+			}
+		}
+		else {
+			ImGui::TextColored(ImVec4(1.0f, 0.2f, 0.2f, 1.0f), "REC");
+			ImGui::SameLine();
+			if (ImGui::Button("Stop Recording")) {
+				videoRecorder.StopRecording();
+			}
+		}
+
 		if (ImGui::Button("Apply Particle Count")) {
 			particleSystem.SetMaxParticles(static_cast<size_t>(uiParticleCount), true);
 		}
@@ -1289,6 +1311,11 @@ int main(int argc, char* argv[]) {
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
+		if (videoRecorder.IsRecording()) {
+			glBindFramebuffer(GL_FRAMEBUFFER, 0);
+			videoRecorder.CaptureFrame();
+		}
+
 		glfwSwapBuffers(window);
 
 		glfwPollEvents();
@@ -1300,6 +1327,10 @@ int main(int argc, char* argv[]) {
 
 	if (nrTex[0] != 0) glDeleteTextures(2, nrTex);
 	if (nrFBO[0] != 0) glDeleteFramebuffers(2, nrFBO);
+
+	if (videoRecorder.IsRecording()) {
+		videoRecorder.StopRecording();
+	}
 
 	ImGui_ImplOpenGL3_Shutdown();
 	ImGui_ImplGlfw_Shutdown();

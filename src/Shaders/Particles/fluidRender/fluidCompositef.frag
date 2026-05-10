@@ -179,12 +179,6 @@ void main() {
 		+ envColor * (0.08 * viewLift)
 		+ bodyColor * 0.30;
 
-	// fluid-only gamma lift to avoid dark-blue collapse on some GPUs without touching whole window
-	//finalColor = pow(max(finalColor, vec3(0.0)), vec3(0.92));
-
-	
-
-
 	//thickness debug
 //	float debugThickness = texture(fluidThicknessTexture, vUV).r;
 //	float vis = debugThickness * 0.2; 
