@@ -37,6 +37,8 @@ src/FluidRenderTarget.h
 src/FluidRenderTarget.cpp
 src/VideoRecorder.h
 src/VideoRecorder.cpp
+src/ParticleExporter.h
+src/ParticleExporter.cpp
 ${IMGUI_DIR}/imgui.cpp
 ${IMGUI_DIR}/imgui_draw.cpp
 ${IMGUI_DIR}/imgui_tables.cpp

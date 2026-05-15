@@ -69,6 +69,7 @@ public:
 	glm::vec3 GetGridMin() const { return GRID_MIN; }
 	glm::vec3 GetGridMax() const { return GRID_MAX; }
 
+	bool ReadbackParticles(std::vector<glm::vec4>& positions, std::vector<glm::vec4>& velocities) const;
 
 
 private:

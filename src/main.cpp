@@ -18,6 +18,7 @@
 #include "ParticleSystem.h"
 #include "FluidRenderTarget.h"
 #include "VideoRecorder.h"
+#include "ParticleExporter.h"
 
 
 
@@ -429,6 +430,12 @@ int main(int argc, char* argv[]) {
 
 	VideoRecorder videoRecorder(caveXRTConfig.width, caveXRTConfig.height, 120, "CaveXRTFluidSim.mp4");
 
+	ParticleExporter particleExporter;
+	bool uiExportParticles = false;
+	int exportFrameIndex = 0;
+	char exportPath[256] = "../../../exports/CaveXRTCache";
+	
+
 	ParticleSystem particleSystem(
 		50000,
 		simparticleRadius,
@@ -829,6 +836,9 @@ int main(int argc, char* argv[]) {
 		ImGui::Text("Sim Timestep: %.1f fps", 1.0f / particleSystem.GetMaxTimeStep());
 		ImGui::SetNextItemWidth(180.0f);
 		ImGui::SliderInt("Particle Count", &uiParticleCount, 5000, 200000);
+		if (ImGui::Button("Apply Particle Count")) {
+			particleSystem.SetMaxParticles(static_cast<size_t>(uiParticleCount), true);
+		}
 
 		ImGui::SeparatorText("Video Capture");
 
@@ -847,9 +857,27 @@ int main(int argc, char* argv[]) {
 			}
 		}
 
-		if (ImGui::Button("Apply Particle Count")) {
-			particleSystem.SetMaxParticles(static_cast<size_t>(uiParticleCount), true);
+		ImGui::SeparatorText("Particle Exporter");
+		ImGui::InputText("Export Path", exportPath, IM_ARRAYSIZE(exportPath));
+
+		if (!particleExporter.IsExporting()) {
+			if (ImGui::Button("Start Export")) {
+				if (particleExporter.BeginSession(exportPath, 60, simparticleRadius)) {
+					exportFrameIndex = 0;
+					uiExportParticles = true;
+				}
+			}
 		}
+		else {
+			if (ImGui::Button("Stop Export")) {
+				particleExporter.EndSession();
+				uiExportParticles = false;
+			}
+		}
+
+
+
+		
 		if (ImGui::DragFloat3("Gravity", &uiGravity.x, 0.05f, -30.0f, 30.0f, "%.2f")) {
 			particleSystem.SetGravity(uiGravity);
 		}
@@ -970,6 +998,15 @@ int main(int argc, char* argv[]) {
 		if (uiSimulationRunning) {
 			particleSystem.Update(deltaTime, wallDamping, enableSPH);
 		}
+		//write frames
+		if (uiExportParticles && particleExporter.IsExporting()) {
+			static std::vector<glm::vec4> pos;
+			static std::vector<glm::vec4> vel;
+			if (particleSystem.ReadbackParticles(pos, vel)) {
+				particleExporter.WriteFrame(exportFrameIndex++, static_cast<float>(glfwGetTime()), pos, vel);
+			}
+		}
+
 		glm::mat4 particleMVP = perspectiveProjection * view * glm::mat4(1.0f);
 
 
@@ -1330,6 +1367,10 @@ int main(int argc, char* argv[]) {
 
 	if (videoRecorder.IsRecording()) {
 		videoRecorder.StopRecording();
+	}
+
+	if (particleExporter.IsExporting()) {
+		particleExporter.EndSession();
 	}
 
 	ImGui_ImplOpenGL3_Shutdown();

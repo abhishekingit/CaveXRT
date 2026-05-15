@@ -1212,3 +1212,19 @@ void ParticleSystem::ResetParticles() {
 	glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
 
 }
+
+bool ParticleSystem::ReadbackParticles(std::vector<glm::vec4>& positions, std::vector<glm::vec4>& velocities) const {
+	if (ssboPos == 0 || ssboVel == 0) return false;
+
+	positions.resize(maxParticles);
+	velocities.resize(maxParticles);
+
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssboPos);
+	glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, positions.size() * sizeof(glm::vec4), positions.data());
+
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssboVel);
+	glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, velocities.size() * sizeof(glm::vec4), velocities.data());
+
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+	return true;
+}
