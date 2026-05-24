@@ -7,6 +7,7 @@
     APIs: gl=4.3
     Profile: core
     Extensions:
+        GL_ARB_texture_filter_anisotropic,
         GL_EXT_texture_filter_anisotropic
     Loader: True
     Local files: False
@@ -3196,6 +3197,10 @@ GLAPI PFNGLGETPOINTERVPROC glad_glGetPointerv;
 #endif
 #define GL_TEXTURE_MAX_ANISOTROPY_EXT 0x84FE
 #define GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT 0x84FF
+#ifndef GL_ARB_texture_filter_anisotropic
+#define GL_ARB_texture_filter_anisotropic 1
+GLAPI int GLAD_GL_ARB_texture_filter_anisotropic;
+#endif
 #ifndef GL_EXT_texture_filter_anisotropic
 #define GL_EXT_texture_filter_anisotropic 1
 GLAPI int GLAD_GL_EXT_texture_filter_anisotropic;

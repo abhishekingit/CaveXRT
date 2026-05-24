@@ -28,6 +28,9 @@ private:
 	uint32_t ShaderID;
 	const char* vertexShaderPath;
 	const char* fragmentShaderPath;
+	const char* geometryShaderPath;
+	const char* tessControlShaderPath;
+	const char* tessEvalShaderPath;
 
 	void compileAndLinkShaders();
 	

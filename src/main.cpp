@@ -1,4 +1,6 @@
+#include <algorithm>
 #include <iostream>
+#include <sstream>
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
@@ -132,7 +134,57 @@ struct AppConfig {
 	int width = 800;
 	int height = 600;
 	std::string modelPath;
+	std::string normalMapPath;
+	std::string displacementMapPath;
 };
+
+uint32_t loadTextureFromPath(const std::string& filePath) {
+	if (filePath.empty()) {
+		return 0;
+	}
+
+	std::vector<unsigned char> image;
+	uint32_t width, height;
+	uint32_t error = lodepng::decode(image, width, height, filePath);
+
+	if (error) {
+		std::cout << "Texture failed to load at path: " << filePath << "\n" << "Lodepng error: " << error << ":" << lodepng_error_text(error) << std::endl;
+		return 0;
+	}
+
+	uint32_t textureID = 0;
+	glGenTextures(1, &textureID);
+	glBindTexture(GL_TEXTURE_2D, textureID);
+
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, image.data());
+
+	glGenerateMipmap(GL_TEXTURE_2D);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+	glBindTexture(GL_TEXTURE_2D, 0);
+	return textureID;
+
+}
+
+void updateTessellationTitle(GLFWwindow* window) {
+	static float lastInner = -1.0f;
+	static float lastOuter = -1.0f;
+
+	if (lastInner == tesselationInnerLevel && lastOuter == tesselationOuterLevel) {
+		return;
+	}
+
+	lastInner = tesselationInnerLevel;
+	lastOuter = tesselationOuterLevel;
+
+	std::ostringstream title;
+	title << "CaveXRT | Tess Inner: " << tesselationInnerLevel << " | Tess Outer: " << tesselationOuterLevel;
+	glfwSetWindowTitle(window, title.str().c_str());
+}
 
 void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods) {
 	auto* state = static_cast<RenderState*>(glfwGetWindowUserPointer(window));
@@ -366,6 +418,12 @@ bool parseArguments(int argc, char* argv[], AppConfig& config) {
 			std::cout << "Usage: \n" << " CaveXRT.exe [options] <model.obj> \n\n" << "Options: \n" << "--width <int> Window width(default 800) \n" << "--height <int> Window height(default 600) \n";
 			return false;
 		}
+		else if (arg == "--normalMap" && i + 1 < argc) {
+			config.normalMapPath = argv[++i];
+		}
+		else if (arg == "--displacementMap" && i + 1 < argc) {
+			config.displacementMapPath = argv[++i];
+		}
 		else {
 			config.modelPath = arg;
 		}
@@ -387,10 +445,12 @@ int main(int argc, char* argv[]) {
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
 	AppConfig config;
-	/*if (!parseArguments(argc, argv, config)) {
+	if (!parseArguments(argc, argv, config)) {
 		return -1;
-	}*/
-	config.modelPath = "../../../assets/models/teapot/teapot.obj";
+	}
+	/*config.modelPath = "../../../assets/models/teapot/teapot.obj";
+	config.normalMapPath = "../../../assets/models/teapot/teapot_normal.png";
+	config.displacementMapPath = "../../../assets/models/teapot/teapot_disp.png";*/
 
 	std::cout << "Loading model: " << config.modelPath << "\n";
 	std::cout << "Window size: " << caveXRTConfig.width << "x" << caveXRTConfig.height << "\n";
@@ -425,7 +485,10 @@ int main(int argc, char* argv[]) {
 
 	Shader shaderprog1("../../../src/Shaders/vshader.vert", "../../../src/Shaders/fshader.frag");
 	Shader shaderprog2("../../../src/Shaders/cubevshader.vert", "../../../src/Shaders/cubefshader.frag");
-	Shader quadShader("../../../src/Shaders/quadVshader.vert", "../../../src/Shaders/quadFshader.frag");
+	Shader quadShader("../../../src/Shaders/quadTVshader.vert", "../../../src/Shaders/quadFshader.frag", nullptr, "../../../src/Shaders/quadTCshader.tesc", "../../../src/Shaders/quadTEshader.tese");
+	Shader quadLineShader("../../../src/Shaders/quadTVshader.vert", "../../../src/Shaders/quadLineFshader.frag", "../../../src/Shaders/quadGshader.geom", "../../../src/Shaders/quadTCshader.tesc", "../../../src/Shaders/quadTEshader.tese");
+
+
 	Shader skyboxShader("../../../src/Shaders/skyboxvshader.vert", "../../../src/Shaders/skyboxfshader.frag");
 	Shader bboxShader("../../../src/Shaders/bboxvshader.vert", "../../../src/Shaders/bboxfshader.frag");
 	Shader fluidRenderShader("../../../src/Shaders/Particles/fluidRender/fluidCompositev.vert", "../../../src/Shaders/Particles/fluidRender/fluidCompositef.frag");
@@ -614,9 +677,18 @@ int main(int argc, char* argv[]) {
 	//ModelLoader teapotModel("../../../assets/models/yoda/yoda.obj");
 	ModelLoader mainModel(config.modelPath);
 	ModelLoader cubeModel("../../../assets/models/cube.obj");
+	ModelLoader lampModel("../../../assets/models/light/light.obj");
 
 	uint32_t cubemapTexture = loadCubemap(caveXRTConfig.skyboxConfig);
+	uint32_t normalMapTexture = loadTextureFromPath(config.normalMapPath);
+	uint32_t displacementMapTexture = loadTextureFromPath(config.displacementMapPath);
+
 	const int teapotEnvMapUnit = 5;
+	const int shadowMapUnit = 8;
+
+	if (normalMapTexture == 0) {
+		std::cout << "plane normal map texture disabled\n";
+	}
 
 	//Computing Model bounding box and center
 	glm::vec3 modelBoxMin(FLT_MAX);
@@ -715,40 +787,40 @@ int main(int argc, char* argv[]) {
 		glClearColor(backgroundColor.x, backgroundColor.y, backgroundColor.z, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);*/
 
-		
+		//
 
-		//glm::vec4 clipPlaneWorld(0.0f, 1.0f, 0.0f, -planeY);
+		////glm::vec4 clipPlaneWorld(0.0f, 1.0f, 0.0f, -planeY);
 
-		/*glm::vec3 reflCameraPos = cameraPos;
-		reflCameraPos.y = planeY - (cameraPos.y - planeY);
+		///*glm::vec3 reflCameraPos = cameraPos;
+		//reflCameraPos.y = planeY - (cameraPos.y - planeY);
 
-		glm::vec3 reflTarget = caveXRTConfig.cameraTarget;
-		reflTarget.y = planeY - (reflTarget.y - planeY);
+		//glm::vec3 reflTarget = caveXRTConfig.cameraTarget;
+		//reflTarget.y = planeY - (reflTarget.y - planeY);
 
-		glm::vec3 reflUp = caveXRTConfig.cameraUp;
-		reflUp.y = -caveXRTConfig.y;*/
+		//glm::vec3 reflUp = caveXRTConfig.cameraUp;
+		//reflUp.y = -caveXRTConfig.y;*/
 	
 
-		//glm::vec3 camUp = caveXRTConfig.cameraUp;
-		//glm::vec3 reflUp;
-		//{ // reflect up as a direction (w=0)
-		//	glm::vec4 up4 = reflectionMatrix * glm::vec4(camUp, 0.0f);
-		//	reflUp = glm::normalize(glm::vec3(up4));
-		//}
+		////glm::vec3 camUp = caveXRTConfig.cameraUp;
+		////glm::vec3 reflUp;
+		////{ // reflect up as a direction (w=0)
+		////	glm::vec4 up4 = reflectionMatrix * glm::vec4(camUp, 0.0f);
+		////	reflUp = glm::normalize(glm::vec3(up4));
+		////}
 
-		//glm::mat4 reflView = glm::lookAt(reflCameraPos, reflTarget, reflUp);
-		glm::mat4 reflView = view;
-		glm::mat4 reflModel = reflectionMatrix * model;
+		////glm::mat4 reflView = glm::lookAt(reflCameraPos, reflTarget, reflUp);
+		//glm::mat4 reflView = view;
+		//glm::mat4 reflModel = reflectionMatrix * model;
 
-		glm::vec3 reflCameraPos = reflectPoint(reflectionMatrix, cameraPos);
-		glm::vec3 reflViewPos = reflectPoint(reflectionMatrix, cameraPosView);
-		
+		//glm::vec3 reflCameraPos = reflectPoint(reflectionMatrix, cameraPos);
+		//glm::vec3 reflViewPos = reflectPoint(reflectionMatrix, cameraPosView);
+		//
 
-		//std::cout << "Refl model matrix " << glm::to_string(reflModel) << std::endl;
+		////std::cout << "Refl model matrix " << glm::to_string(reflModel) << std::endl;
 
-		glm::mat4 reflMVP = perspectiveProjection * reflView * reflModel;
-		glm::mat4 reflModelView = reflView * reflModel;
-		//glm::vec3 reflViewPos = glm::vec3(cameraPosView.x, -cameraPosView.y, cameraPosView.z);
+		//glm::mat4 reflMVP = perspectiveProjection * reflView * reflModel;
+		//glm::mat4 reflModelView = reflView * reflModel;
+		////glm::vec3 reflViewPos = glm::vec3(cameraPosView.x, -cameraPosView.y, cameraPosView.z);
 
 		//shaderprog1.use();
 		///*shaderprog1.setVec4("clipPlane", clipPlaneWorld);
@@ -1029,14 +1101,26 @@ int main(int argc, char* argv[]) {
 
 		glm::mat4 planeView = glm::lookAt(planeCameraPos, caveXRTConfig.cameraTarget, caveXRTConfig.cameraUp);
 
+		
+
 		glm::mat4 planeMVP = perspectiveProjection * view * planeModel;
-		glm::mat4 reflectionVP = perspectiveProjection * reflView;
 		quadShader.setMat4("mvp", planeMVP);
 		quadShader.setMat4("model", planeModel);
 		quadShader.setMat4("view", view);
+		quadShader.setMat4("projection", perspectiveProjection);
+		quadShader.setMat4("lightSpaceMatrix", lightSpaceMatrix);
 		quadShader.setVec3("cameraPosWorld", cameraPos);
+		quadShader.setVec3("lightPos", lightPosWorld);
 		quadShader.setBool("skyboxEnabled", caveXRTConfig.skyboxConfig.enabled);
-		quadShader.setMat4("reflectionVP", reflectionVP);
+		quadShader.setBool("showReflections", false);
+		quadShader.setBool("showDepthMap", false);
+		quadShader.setBool("useNormalMap", true);
+		quadShader.setFloat("tessOuterLevel", tesselationOuterLevel);
+		quadShader.setFloat("tessInnerLevel", tesselationInnerLevel);
+		quadShader.setBool("useDisplacementMap", hasDisp);
+		quadShader.setFloat("displacementScale", displacementScale);
+		quadShader.setBool("useDispShadows", false);
+
 		quadShader.setFloat("width", reflectionRenderTarget.Width());
 		quadShader.setFloat("height", reflectionRenderTarget.Height());
 		quadShader.setFloat("checkerScale", 50.0f);
@@ -1044,32 +1128,103 @@ int main(int argc, char* argv[]) {
 		quadShader.setFloat("envBlend", 0.04f);
 		quadShader.setFloat("desaturationVal", 0.25f);
 
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_2D, reflectionRenderTarget.GetColorTexture());
-		quadShader.setInt("renderTexture", 0);
+		quadShader.setVec3("ambient", glm::vec3(0.0f, 0.0f, 0.0f));
+		quadShader.setVec3("diffuse", glm::vec3(0.2f, 0.2f, 0.2f));
+		quadShader.setVec3("specular", glm::vec3(1.0f, 1.0f, 1.0f));
 
-		glActiveTexture(GL_TEXTURE1);
-		glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
-		/*glGenerateMipmap(GL_TEXTURE_2D);*/
-		quadShader.setInt("cubemaptexture", 1);
+		quadShader.setFloat("ambientIntensity", 1.0f);
+		quadShader.setFloat("specularIntensity", 1.0);
+		quadShader.setFloat("glossiness", 32.0f);
+
+		//glActiveTexture(GL_TEXTURE0);
+		//glBindTexture(GL_TEXTURE_2D, reflectionRenderTarget.GetColorTexture());
+		//quadShader.setInt("renderTexture", 0);
+		//		
+		//glActiveTexture(GL_TEXTURE1);
+		//glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
+		///*glGenerateMipmap(GL_TEXTURE_2D);*/
+		//quadShader.setInt("cubemaptexture", 1);
+
+		glActiveTexture(GL_TEXTURE2);
+		glBindTexture(GL_TEXTURE_2D, depthTarget.GetDepthTexture());
+		quadShader.setInt("depthMap", 2);
+
+		if (normalMapTexture != 0) {
+			glActiveTexture(GL_TEXTURE3);
+			glBindTexture(GL_TEXTURE_2D, normalMapTexture);
+			quadShader.setInt("normalMap", 3);
+		}
+		
+		if (displacementMapTexture != 0) {
+			glActiveTexture(GL_TEXTURE4);
+			glBindTexture(GL_TEXTURE_2D, displacementMapTexture);
+			quadShader.setInt("displacementMap", 4);
+		}
+
+		glPatchParameteri(GL_PATCH_VERTICES, 4);
 
 		glBindVertexArray(quadVAO);
-		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, nullptr);
+		//glDrawElements(GL_PATCHES, 4, GL_UNSIGNED_INT, nullptr);
+		glDrawArrays(GL_PATCHES, 0, 4);
 		glBindVertexArray(0);
 	
+		if (showTriangulation) {
+			quadLineShader.use();
+			quadLineShader.setMat4("model", planeModel);
+			quadLineShader.setMat4("view", view);
+			quadLineShader.setMat4("projection", perspectiveProjection);
+			quadLineShader.setFloat("tessOuterLevel", tesselationOuterLevel);
+			quadLineShader.setFloat("tessInnerLevel", tesselationInnerLevel);
+			quadLineShader.setBool("useDisplacementMap", hasDisp);
+			quadLineShader.setFloat("displacementScale", displacementScale);
+			quadLineShader.setBool("useDispShadows", false);
+			
+			if (hasDisp) {
+				glActiveTexture(GL_TEXTURE0);
+				glBindTexture(GL_TEXTURE_2D, displacementMapTexture);
+				quadLineShader.setInt("displacementMap", 0);
+
+			}
+
+
+			quadLineShader.setFloat("lineDepthBiasNdc", 0.005f);
+			quadLineShader.setVec3("lineColor", glm::vec3(1.0f, 1.0f, 0.0f));
+			glBindVertexArray(quadVAO);
+			//glDrawElements(GL_PATCHES, 6, GL_UNSIGNED_INT, nullptr);
+			glDrawArrays(GL_PATCHES, 0, 4);
+			glBindVertexArray(0);
+		}
+
+		
+
 		glDepthMask(GL_FALSE);
 		glDepthFunc(GL_LEQUAL);
-		skyboxShader.use();
-		glActiveTexture(GL_TEXTURE0);
-		glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
-		glm::mat4 skyboxView = glm::mat4(glm::mat3(view));
-		skyboxShader.setMat4("projection", perspectiveProjection);
-		skyboxShader.setMat4("view", skyboxView);
-		skyboxShader.setInt("skybox", 0);
 
-		cubeModel.Draw(skyboxShader);
+		if (caveXRTConfig.skyboxConfig.enabled) {
+			skyboxShader.use();
+			glActiveTexture(GL_TEXTURE0);
+			glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
+			glm::mat4 skyboxView = glm::mat4(glm::mat3(view));
+			skyboxShader.setMat4("projection", perspectiveProjection);
+			skyboxShader.setMat4("view", skyboxView);
+			skyboxShader.setInt("skybox", 0);
+
+			cubeModel.Draw(skyboxShader);
+		}
+	
 		glDepthFunc(GL_LESS);
 		glDepthMask(GL_TRUE);
+		/*if (caveXRTConfig.skyboxConfig.enabled) {
+			
+		}*/
+		
+
+		shaderprog2.use();
+
+		glm::vec3 lampTarget = caveXRTConfig.cameraTarget;
+		glm::vec3 lampForward = glm::normalize(lampTarget - lightPosWorld);
+		glm::vec3 lampRight = glm::normalize(glm::cross(glm::vec3(0.0f, 1.0f, 0.0f), lampForward));
+		glm::vec3 lampUp = glm::cross(lampForward, lampRight);
 
 		//Reflection buffer for fluid planar highlights
 		reflectionRenderTarget.Bind();
@@ -1148,7 +1303,7 @@ int main(int argc, char* argv[]) {
 			//	// --- repo uniforms ---
 			//	fluidNarrowRangeShader.setFloat("u_ParticleRadius", particleRadius);
 			//	fluidNarrowRangeShader.setInt("u_FilterSize", uiNRFilterRadius);
-			//	fluidNarrowRangeShader.setInt("u_MaxFilterSize", 32); // try 16–32 later
+			//	fluidNarrowRangeShader.setInt("u_MaxFilterSize", 32); // try 16ï¿½32 later
 			//	fluidNarrowRangeShader.setInt("u_ScreenWidth", nrWidth);
 			//	fluidNarrowRangeShader.setInt("u_ScreenHeight", nrHeight);
 			//	fluidNarrowRangeShader.setInt("u_DoFilter1D", 1);
@@ -1341,13 +1496,20 @@ int main(int argc, char* argv[]) {
 		/*shaderprog2.use();
 		glm::mat4 lightModel = glm::mat4(1.0f);
 		lightModel = glm::translate(lightModel, lightPosWorld);
-		lightModel = glm::scale(lightModel, glm::vec3(0.02f));
+
+		glm::mat4 lightRotation(1.0f);
+		lightRotation[0] = glm::vec4(lampRight, 0.0f);
+		lightRotation[1] = glm::vec4(lampUp, 0.0f);
+		lightRotation[2] = glm::vec4(-lampForward, 0.0f);
+
+		lightModel = lightModel * lightRotation;
+		lightModel = lightModel * glm::scale(glm::mat4(1.0f), glm::vec3(0.1f));
 
 		glm::mat4 lightMVP = perspectiveProjection * view * lightModel;
 		shaderprog2.setMat4("mvp", lightMVP);
 		shaderprog2.setVec3("lightColor", lightColor);
 
-		cubeModel.Draw(shaderprog2);*/
+ 		lampModel.Draw(shaderprog2);
 
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

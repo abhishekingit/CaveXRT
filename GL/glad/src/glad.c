@@ -7,6 +7,7 @@
     APIs: gl=4.3
     Profile: core
     Extensions:
+        GL_ARB_texture_filter_anisotropic,
         GL_EXT_texture_filter_anisotropic
     Loader: True
     Local files: False
@@ -835,6 +836,7 @@ PFNGLVIEWPORTARRAYVPROC glad_glViewportArrayv = NULL;
 PFNGLVIEWPORTINDEXEDFPROC glad_glViewportIndexedf = NULL;
 PFNGLVIEWPORTINDEXEDFVPROC glad_glViewportIndexedfv = NULL;
 PFNGLWAITSYNCPROC glad_glWaitSync = NULL;
+int GLAD_GL_ARB_texture_filter_anisotropic = 0;
 int GLAD_GL_EXT_texture_filter_anisotropic = 0;
 static void load_GL_VERSION_1_0(GLADloadproc load) {
 	if(!GLAD_GL_VERSION_1_0) return;
@@ -1454,6 +1456,7 @@ static void load_GL_VERSION_4_3(GLADloadproc load) {
 }
 static int find_extensionsGL(void) {
 	if (!get_exts()) return 0;
+	GLAD_GL_ARB_texture_filter_anisotropic = has_ext("GL_ARB_texture_filter_anisotropic");
 	GLAD_GL_EXT_texture_filter_anisotropic = has_ext("GL_EXT_texture_filter_anisotropic");
 	free_exts();
 	return 1;

@@ -11,7 +11,7 @@
   ],
   "skyboxExposure": 1.0,
 
-  "backgroundColor": [ 0.8, 0.8, 0.8 ],
+  "backgroundColor": [ 0.1, 0.1, 0.1 ],
   "lightColor": [ 1.0, 1.0, 1.0 ],
   "yaw": 0.5,
   "pitch": 0.3,
