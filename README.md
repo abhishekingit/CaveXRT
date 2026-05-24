@@ -1,39 +1,20 @@
-## CaveXRT
+# CaveXRT
 
-## GPU Fluid Simulation using Compute Shaders 
+https://github.com/user-attachments/assets/e6982fb6-f765-4b64-af92-97f824352ae1
 
-### Simple Particle system using Compute Shaders
+CaveXRT (Compute Accelerated Visualization Engine — X for Experimental — Real Time) is a real-time GPU fluid simulation engine focused on comparing modern particle-based fluid simulation methods and rendering techniques. The engine implements both Smoothed Particle Hydrodynamics (SPH) and Position Based Fluids (PBF) entirely on the GPU using compute shaders, enabling interactive fluid simulation and visualization in real time.
 
-https://github.com/user-attachments/assets/edb9c679-09b3-4ae1-a8b5-c431c7f1fe30
+To improve visual realism, the simulation is rendered using a screen-space fluid rendering pipeline with depth/thickness reconstruction and a Narrow Range Filter for smooth surface generation. The engine also includes tools for simulation recording and particle export, allowing simulations to be captured and integrated into external rendering and cinematic workflows.
 
-### Bounding boxes and collisions 
+https://github.com/user-attachments/assets/06bf853e-97fc-456f-b284-f48bab1f731b
+Cinematic fluid sequence created using CaveXRT simulations, Blender surface reconstruction, and Unreal Engine 5.6 rendering pipeline.
 
-https://github.com/user-attachments/assets/57ba525c-6b77-4b64-906f-2c669de891b1
+CaveXRT features GPU-accelerated particle simulation with uniform grid neighbor search, real-time SPH and PBF solvers, vorticity confinement, XSPH viscosity, and screen-space surface reconstruction techniques for smooth fluid rendering. The rendering pipeline includes depth and thickness texture generation, narrow range filtering, reconstructed surface normals, and fluid shading for visually continuous fluid surfaces. The engine additionally supports particle cache serialization/export, interactive simulation controls, and simulation screen recording for debugging, visualization, and cinematic workflows in external tools such as Blender and Unreal Engine. The engine is built using C++, OpenGL, and GLSL Compute Shaders for real-time GPU-accelerated simulation and rendering.
 
-### Uniform Grid for neighbour search
+## Project Goal
 
-https://github.com/user-attachments/assets/741e9e45-6e94-48e7-8ec9-a4de1ea8fe95
-
-### Density pass with gravity force
-
-https://github.com/user-attachments/assets/a244efc1-2b6a-430a-bb62-12a78f3cfbe0
-
-### Viscosity forces 
-
-https://github.com/user-attachments/assets/b2bdc704-cfa4-46aa-a592-d4c58e22fc48
-
-### Pressure forces
-
-https://github.com/user-attachments/assets/d6877951-3120-4c80-a82f-414994188eb5
-
-Simple particle system using compute shaders. Particles are initialized along the uniform grid and positions and velocities are updated each frame based on delta time. Here the particles are rendered as points with a basic shader that colors them. Particle systems support collisions using bounding boxes and also theres a damping factor added to the velocity computation. The Uniform grid needed for performing neighbour search for SPH is visualized using the particles being arranged according to the grid and also colored according to the Cell IDs. The uniform grid operations like counting the particles and sorting are also performed using compute shaders. The grid helps in performing the simulation passes for density, viscosity and pressure efficiently. 
-
-The density pass is the first SPH pass where the cubic kernel is used for smoothing and the uniform grid helps in computation of density for each particle based on neighbours. For visualizing I am coloring the particles based on density. The density pass is essential for other passes involving viscosity and pressure solvers. The smoothing radius here is chosen as the grid cell size which is particle sim radius * 4 which captures a good amount of neighbours for each particle. The gravity force is added as acceleration for the integrator. 
-
-This viscosity compute pass processes one particle per GPU thread and computes a smoothing acceleration from nearby particles to damp noisy velocity differences. It first finds the current particle’s grid cell using particleCell, then searches only the 27 neighboring cells (3×3×3) using the prebuilt uniform grid buffers (countBuf, cellWriteBuf, sortedIndexBuf) instead of checking all particles globally. Visually with increasing the viscosity coefficient the particles spreads less on the surface after falling and are grouped more together and the vice versa. The Viscosity forces visualization above uses a viscosity coefficient of 0.03f. Using a higher value like 0.1f-0.5f results in thicker fluid behaviour.
-
-The pressure solver is the core of the SPH technique, It uses the gradient spiky kernel for smoothing. The pressure solver requires a stiffness constant which acts as a multiplier and is a tuning parameter for the pressure forces. Increasing the stiffness constant increases the pressure forces among the particles causing more turbulence. The pressure pass also requires the rest density of the fluid and density calculated from the density pass, It requires clamping of volume deviation caused because of rest density and the density calculated because of the particle deficiency problem.
-
+The goal of CaveXRT is to explore the trade-offs between SPH and PBF methods in terms of stability, incompressibility, and real-time performance while building a modern GPU-driven fluid rendering pipeline. The engine additionally explores how real-time simulation data can be integrated into external rendering and cinematic pipelines through particle export and offline visualization workflows.
+ 
 ### Requirements
 - CMake >= 3.20
 - C++20 compiler (MSVC/Clang/GCC)
