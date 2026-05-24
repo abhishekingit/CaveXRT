@@ -7,6 +7,7 @@ CaveXRT (Compute Accelerated Visualization Engine — X for Experimental — Rea
 To improve visual realism, the simulation is rendered using a screen-space fluid rendering pipeline with depth/thickness reconstruction and a Narrow Range Filter for smooth surface generation. The engine also includes tools for simulation recording and particle export, allowing simulations to be captured and integrated into external rendering and cinematic workflows.
 
 https://github.com/user-attachments/assets/06bf853e-97fc-456f-b284-f48bab1f731b
+
 Cinematic fluid sequence created using CaveXRT simulations, Blender surface reconstruction, and Unreal Engine 5.6 rendering pipeline.
 
 CaveXRT features GPU-accelerated particle simulation with uniform grid neighbor search, real-time SPH and PBF solvers, vorticity confinement, XSPH viscosity, and screen-space surface reconstruction techniques for smooth fluid rendering. The rendering pipeline includes depth and thickness texture generation, narrow range filtering, reconstructed surface normals, and fluid shading for visually continuous fluid surfaces. The engine additionally supports particle cache serialization/export, interactive simulation controls, and simulation screen recording for debugging, visualization, and cinematic workflows in external tools such as Blender and Unreal Engine. The engine is built using C++, OpenGL, and GLSL Compute Shaders for real-time GPU-accelerated simulation and rendering.
