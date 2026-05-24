@@ -194,7 +194,7 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
 		}
 	}
 
-	if ((key == GLFW_KEY_1 || key == GLFW_KEY_2 || key == GLFW_KEY_3 || key == GLFW_KEY_4) && action == GLFW_PRESS) {
+	if ((key == GLFW_KEY_1 || key == GLFW_KEY_2 || key == GLFW_KEY_3 || key == GLFW_KEY_4 || key == GLFW_KEY_5) && action == GLFW_PRESS) {
 		if (state) {
 			if (key == GLFW_KEY_1) {
 				state->particleSystem->SetSpawnMode(ParticleSystem::SpawnMode::Random, true);
@@ -212,6 +212,10 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods
 				state->particleSystem->SetSpawnMode(ParticleSystem::SpawnMode::SingleSheet, true);
 				std::cout << "Spawn Mode: SingleSheet" << std::endl;
 
+			}
+			else if (key == GLFW_KEY_5) {
+				state->particleSystem->SetSpawnMode(ParticleSystem::SpawnMode::PourIntoContainer, true);
+				std::cout << "Spawn Mode: PourIntoContainer" << std::endl;
 			}
 		}
 		else {

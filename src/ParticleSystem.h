@@ -2,6 +2,7 @@
 
 #include "CaveCompute.h"
 #include "Shader.h"
+#include <random>
 #include <vector>
 
 struct Particle {
@@ -19,7 +20,8 @@ public:
 		Random = 0,
 		SingleDam = 1,
 		DoubleDam = 2,
-		SingleSheet = 3
+		SingleSheet = 3,
+		PourIntoContainer = 4
 	};
 
 	ParticleSystem(size_t maxParticles, float simRadius, const glm::vec3& gridMin, const glm::vec3& gridMax, const char* computeShaderPath, const char* vertexShaderPath, const char* fragmentShaderPath);
@@ -83,6 +85,15 @@ private:
 	glm::vec3 GRID_SIZE;
 	glm::ivec3 GRID_RES;
 	uint32_t GRID_VOXEL_COUNT;
+
+	glm::vec3 pourEmitterCenter{};
+	float pourEmitterRadius = 0.5f;
+	float pourEmitterHeight = 0.6f;
+	glm::vec3 pourBaseVelocity{ 1.8f, -2.6f, 0.0f };
+	float pourVelocityJitter = 0.12f;
+	uint32_t activeParticleCount = 0;
+	float pourSpawnRate = 5000.0f;
+	float pourSpawnAccumulator = 0.0f;
 
 	float boundarySpacing = 0.0f;
 	uint32_t boundaryCount = 0;
@@ -182,9 +193,13 @@ private:
 	//boundary
 	std::vector<glm::vec4> boundaryGhostParticles;
 
+	glm::vec3 RandomPointInBox(const glm::vec3& min, const glm::vec3& max, std::mt19937& rng) const;
+	glm::vec3 RandomPointInCylinder(const glm::vec3& center, float radius, float minY, float maxY, std::mt19937& rng) const;
+
 	void InitializeGrid();
 	void InitializeBoundaryGhostParticles();
-	void BuildUniformGrid(bool usePredictedPositions);
+	void BuildUniformGrid(bool usePredictedPositions, uint32_t particleCount);
+	void EmitPourIntoContainerParticles(float dt);
 	void InitializeParticles();
 	//float ComputeCFLTimeStep(float dtMin, float dtMax);
 

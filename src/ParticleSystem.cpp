@@ -1,6 +1,5 @@
-#pragma once
-
 #include <random>
+#include <cmath>
 #include <glm/glm.hpp>
 #include "ParticleSystem.h"
 
@@ -46,6 +45,16 @@ ParticleSystem::ParticleSystem(size_t maxParticles, float simRadius, const glm::
 	this->viscosityCoeff = 0.01f;
 	this->stiffness = 40.0f;
 	this->boundarySpacing = this->PARTICLE_SIM_RADIUS * 2.0f;
+
+	const glm::vec3 size = glm::max(GRID_MAX - GRID_MIN, glm::vec3(PARTICLE_SIM_RADIUS * 4.0f));
+	const float pad = PARTICLE_SIM_RADIUS * 3.0f;
+	pourEmitterCenter = glm::vec3(
+		GRID_MIN.x + size.x * 0.22f,
+		GRID_MAX.y - pad,
+		0.5f * (GRID_MIN.z + GRID_MAX.z)
+	);
+	pourEmitterRadius = glm::max(PARTICLE_SIM_RADIUS * 4.5f, size.z * 0.18f);
+	pourEmitterHeight = glm::max(PARTICLE_SIM_RADIUS * 8.0f, size.y * 0.22f);
 
 	InitializeGrid();
 	InitializeBoundaryGhostParticles();
@@ -391,7 +400,7 @@ void ParticleSystem::InitializeGrid() {
 
 }
 
-void ParticleSystem::BuildUniformGrid(bool usePredictedPositions) {
+void ParticleSystem::BuildUniformGrid(bool usePredictedPositions, uint32_t particleCount) {
 	auto divUp = [](uint32_t a, uint32_t b) { return (a + b - 1u) / b; };
 	const uint32_t scanElemsPerGroup = 512u;
 	const uint32_t scanGroupCount = divUp(GRID_VOXEL_COUNT, scanElemsPerGroup);
@@ -406,7 +415,7 @@ void ParticleSystem::BuildUniformGrid(bool usePredictedPositions) {
 
 
 	gridParticleCountProgram->use();
-	gridParticleCountProgram->setUint("particleCount", static_cast<uint32_t>(maxParticles));
+	gridParticleCountProgram->setUint("particleCount", particleCount);
 	gridParticleCountProgram->setVec3("gridMin", GRID_MIN);
 	gridParticleCountProgram->setFloat("cellSize", GRID_CELL_SIZE);
 	gridParticleCountProgram->setUint("gridResX", static_cast<uint32_t>(GRID_RES.x));
@@ -414,7 +423,7 @@ void ParticleSystem::BuildUniformGrid(bool usePredictedPositions) {
 	gridParticleCountProgram->setUint("gridResZ", static_cast<uint32_t>(GRID_RES.z));
 
 
-	uint32_t particleGroups = divUp(static_cast<uint32_t>(maxParticles), 64u);
+	uint32_t particleGroups = divUp(particleCount, 64u);
 
 	gridParticleCountProgram->dispatch(particleGroups, 1, 1);
 	glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
@@ -521,7 +530,7 @@ void ParticleSystem::BuildUniformGrid(bool usePredictedPositions) {
 	glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 10, ssboSortedVel);
 
 	gridParticleReorderProgram->use();
-	gridParticleReorderProgram->setUint("particleCount", static_cast<uint32_t>(maxParticles));
+	gridParticleReorderProgram->setUint("particleCount", particleCount);
 	gridParticleReorderProgram->dispatch(particleGroups, 1, 1);
 	glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
@@ -542,6 +551,72 @@ void ParticleSystem::SetMaxParticles(size_t count, bool reinitialize) {
 	if (reinitialize) {
 		InitializeParticles();
 	}
+}
+
+glm::vec3 ParticleSystem::RandomPointInBox(const glm::vec3& minB, const glm::vec3& maxB, std::mt19937& rng) const {
+	std::uniform_real_distribution<float> ux(minB.x, maxB.x);
+	std::uniform_real_distribution<float> uy(minB.y, maxB.y);
+	std::uniform_real_distribution<float> uz(minB.z, maxB.z);
+	return glm::vec3(ux(rng), uy(rng), uz(rng));
+}
+
+glm::vec3 ParticleSystem::RandomPointInCylinder(const glm::vec3& center, float radius, float minY, float maxY, std::mt19937& rng) const {
+	std::uniform_real_distribution<float> u01(0.0f, 1.0f);
+	std::uniform_real_distribution<float> uy(minY, maxY);
+	const float theta = 2.0f * PI * u01(rng);
+	const float r = radius * std::sqrt(u01(rng));
+	return glm::vec3(center.x + r * std::cos(theta), uy(rng), center.z + r * std::sin(theta));
+}
+
+void ParticleSystem::EmitPourIntoContainerParticles(float dt) {
+	if (spawnMode != SpawnMode::PourIntoContainer) return;
+	if (activeParticleCount >= static_cast<uint32_t>(maxParticles)) return;
+
+	pourSpawnAccumulator += dt * pourSpawnRate;
+	uint32_t spawnNow = static_cast<uint32_t>(pourSpawnAccumulator);
+	if (spawnNow == 0u) return;
+
+	pourSpawnAccumulator -= static_cast<float>(spawnNow);
+	const uint32_t remaining = static_cast<uint32_t>(maxParticles) - activeParticleCount;
+	spawnNow = glm::min(spawnNow, remaining);
+
+	std::vector<glm::vec4> posData(spawnNow);
+	std::vector<glm::vec4> velData(spawnNow);
+
+	std::mt19937 rng(static_cast<uint32_t>(std::random_device{}()));
+	std::uniform_real_distribution<float> j(-pourVelocityJitter, pourVelocityJitter);
+	const float yMin = pourEmitterCenter.y - pourEmitterHeight;
+	const float yMax = pourEmitterCenter.y;
+
+	for (uint32_t i = 0; i < spawnNow; ++i) {
+		glm::vec3 p = RandomPointInCylinder(pourEmitterCenter, pourEmitterRadius, yMin, yMax, rng);
+		p = glm::clamp(p, GRID_MIN + glm::vec3(PARTICLE_SIM_RADIUS), GRID_MAX - glm::vec3(PARTICLE_SIM_RADIUS));
+		glm::vec3 v = pourBaseVelocity + glm::vec3(j(rng), -std::abs(j(rng)) * 0.12f, j(rng));
+		posData[i] = glm::vec4(p, 1.0f);
+		velData[i] = glm::vec4(v, 0.0f);
+
+		const uint32_t dst = activeParticleCount + i;
+		particles[dst].positionX = p.x;
+		particles[dst].positionY = p.y;
+		particles[dst].positionZ = p.z;
+		particles[dst].velocityX = v.x;
+		particles[dst].velocityY = v.y;
+		particles[dst].velocityZ = v.z;
+	}
+
+	const GLintptr offset = static_cast<GLintptr>(activeParticleCount * sizeof(glm::vec4));
+	const GLsizeiptr bytes = static_cast<GLsizeiptr>(spawnNow * sizeof(glm::vec4));
+
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssboPos);
+	glBufferSubData(GL_SHADER_STORAGE_BUFFER, offset, bytes, posData.data());
+
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssboVel);
+	glBufferSubData(GL_SHADER_STORAGE_BUFFER, offset, bytes, velData.data());
+
+	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+	glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
+
+	activeParticleCount += spawnNow;
 }
 
 void ParticleSystem::InitializeParticles() {
@@ -654,6 +729,15 @@ void ParticleSystem::InitializeParticles() {
 			emitFallingStack(minB.x, minB.x + damWidth, zMin, zMax, leftTarget, spacing);
 			emitFallingStack(maxB.x - damWidth, maxB.x, zMin, zMax, rightTarget, spacing);
 		}
+		else if (spawnMode == SpawnMode::PourIntoContainer) {
+			const glm::vec3 parkedPos = GRID_MIN - glm::vec3(PARTICLE_SIM_RADIUS * 20.0f);
+			for (; idx < maxParticles; idx++) {
+				writeParticle(idx, parkedPos, glm::vec3(0.0f));
+			}
+			activeParticleCount = 0;
+			pourSpawnAccumulator = 0.0f;
+
+		}
 		else {
 			const float sheetSpacing = PARTICLE_SIM_RADIUS * 2.0f;
 			const float xMargin = size.x * 0.08f;
@@ -683,6 +767,10 @@ void ParticleSystem::InitializeParticles() {
 				sheetBottomY = topLimit - (static_cast<float>(layerCount - 1u) * sheetSpacing);
 				sheetBottomY = glm::max(sheetBottomY, minB.y + PARTICLE_SIM_RADIUS);
 				sheetTopY = sheetBottomY + (static_cast<float>(layerCount - 1u) * sheetSpacing);
+			}
+
+			if (spawnMode != SpawnMode::PourIntoContainer) {
+				activeParticleCount = static_cast<uint32_t>(maxParticles);
 			}
 
 			glm::vec3 sMin(xMin, sheetBottomY, zMin);
@@ -789,9 +877,22 @@ void ParticleSystem::InitializeParticles() {
 }
 
 void ParticleSystem::Update(float deltaTime, float wallDamping, bool enableSPH) {
-	uint32_t groups = (maxParticles + workGroupSize - 1) / workGroupSize;
 	//const float dt = std::min(deltaTime, 1.0f / 120.0f);
 	const float dt = std::min(deltaTime, maxTimeStep);
+
+	if (spawnMode == SpawnMode::PourIntoContainer) {
+		EmitPourIntoContainerParticles(dt);
+	}
+
+	const uint32_t simParticleCount = (spawnMode == SpawnMode::PourIntoContainer)
+		? activeParticleCount
+		: static_cast<uint32_t>(maxParticles);
+
+	if (simParticleCount == 0u) {
+		return;
+	}
+
+	uint32_t groups = (simParticleCount + workGroupSize - 1) / workGroupSize;
 	
 	//smoothing kernel radius
 	const float h = GRID_CELL_SIZE;
@@ -849,7 +950,7 @@ void ParticleSystem::Update(float deltaTime, float wallDamping, bool enableSPH) 
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 7, ssboDensity);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 9, ssboPressure);
 
-		BuildUniformGrid(usePredictedPositionsFlag);
+		BuildUniformGrid(usePredictedPositionsFlag, simParticleCount);
 		//for boundary using same binding
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 8, ssboSortedPos);
 		glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 10, ssboSortedVel);
@@ -861,7 +962,7 @@ void ParticleSystem::Update(float deltaTime, float wallDamping, bool enableSPH) 
 		if (!sphDensityPressureComputeProgram || !sphForceIntegrateComputeProgram) return;
 
 		sphDensityPressureComputeProgram->use();
-		sphDensityPressureComputeProgram->setUint("particleCount", maxParticles);
+		sphDensityPressureComputeProgram->setUint("particleCount", simParticleCount);
 		sphDensityPressureComputeProgram->setUint("gridResX", static_cast<uint32_t>(GRID_RES.x));
 		sphDensityPressureComputeProgram->setUint("gridResY", static_cast<uint32_t>(GRID_RES.y));
 		sphDensityPressureComputeProgram->setUint("gridResZ", static_cast<uint32_t>(GRID_RES.z));
@@ -875,7 +976,7 @@ void ParticleSystem::Update(float deltaTime, float wallDamping, bool enableSPH) 
 		glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
 
 		sphForceIntegrateComputeProgram->use();
-		sphForceIntegrateComputeProgram->setUint("particleCount", maxParticles);
+		sphForceIntegrateComputeProgram->setUint("particleCount", simParticleCount);
 		sphForceIntegrateComputeProgram->setUint("gridResX", static_cast<uint32_t>(GRID_RES.x));
 		sphForceIntegrateComputeProgram->setUint("gridResY", static_cast<uint32_t>(GRID_RES.y));
 		sphForceIntegrateComputeProgram->setUint("gridResZ", static_cast<uint32_t>(GRID_RES.z));
@@ -911,7 +1012,7 @@ void ParticleSystem::Update(float deltaTime, float wallDamping, bool enableSPH) 
 			uint32_t pbfIter = 0;
 			if (!pbfPredictPosComputeProgram) return;
 			pbfPredictPosComputeProgram->use();
-			pbfPredictPosComputeProgram->setUint("particleCount", maxParticles);
+			pbfPredictPosComputeProgram->setUint("particleCount", simParticleCount);
 			pbfPredictPosComputeProgram->setFloat("deltaTime", dtSub);
 			pbfPredictPosComputeProgram->setVec3("boxMin", this->GRID_MIN);
 			pbfPredictPosComputeProgram->setVec3("boxMax", this->GRID_MAX);
@@ -925,7 +1026,7 @@ void ParticleSystem::Update(float deltaTime, float wallDamping, bool enableSPH) 
 
 			glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssboPredPos);
 			timePbfGpu(PBF_GRID_PRE, [&]() {
-				BuildUniformGrid(usePredictedPositionsFlag);
+				BuildUniformGrid(usePredictedPositionsFlag, simParticleCount);
 			});
 
 
@@ -943,7 +1044,7 @@ void ParticleSystem::Update(float deltaTime, float wallDamping, bool enableSPH) 
 
 				if (!pbfLambdaComputeProgram) return;
 				pbfLambdaComputeProgram->use();
-				pbfLambdaComputeProgram->setUint("particleCount", maxParticles);
+				pbfLambdaComputeProgram->setUint("particleCount", simParticleCount);
 				pbfLambdaComputeProgram->setUint("gridResX", static_cast<uint32_t>(GRID_RES.x));
 				pbfLambdaComputeProgram->setUint("gridResY", static_cast<uint32_t>(GRID_RES.y));
 				pbfLambdaComputeProgram->setUint("gridResZ", static_cast<uint32_t>(GRID_RES.z));
@@ -959,7 +1060,7 @@ void ParticleSystem::Update(float deltaTime, float wallDamping, bool enableSPH) 
 
 				if (!pbfDeltaPosComputeProgram) return;
 				pbfDeltaPosComputeProgram->use();
-				pbfDeltaPosComputeProgram->setUint("particleCount", maxParticles);
+				pbfDeltaPosComputeProgram->setUint("particleCount", simParticleCount);
 				pbfDeltaPosComputeProgram->setUint("gridResX", static_cast<uint32_t>(GRID_RES.x));
 				pbfDeltaPosComputeProgram->setUint("gridResY", static_cast<uint32_t>(GRID_RES.y));
 				pbfDeltaPosComputeProgram->setUint("gridResZ", static_cast<uint32_t>(GRID_RES.z));
@@ -977,7 +1078,7 @@ void ParticleSystem::Update(float deltaTime, float wallDamping, bool enableSPH) 
 
 				if (!pbfApplyCorrComputeProgram) return;
 				pbfApplyCorrComputeProgram->use();
-				pbfApplyCorrComputeProgram->setUint("particleCount", maxParticles);
+				pbfApplyCorrComputeProgram->setUint("particleCount", simParticleCount);
 				pbfApplyCorrComputeProgram->setVec3("boxMin", this->GRID_MIN);
 				pbfApplyCorrComputeProgram->setVec3("boxMax", this->GRID_MAX);
 				pbfApplyCorrComputeProgram->setFloat("particleRadius", this->PARTICLE_SIM_RADIUS);
@@ -989,7 +1090,7 @@ void ParticleSystem::Update(float deltaTime, float wallDamping, bool enableSPH) 
 
 				glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, ssboPredPos);
 				timePbfGpu(PBF_GRID_ITER, [&]() {
-					BuildUniformGrid(usePredictedPositionsFlag);
+					BuildUniformGrid(usePredictedPositionsFlag, simParticleCount);
 				});
 
 				pbfIter++;
@@ -999,7 +1100,7 @@ void ParticleSystem::Update(float deltaTime, float wallDamping, bool enableSPH) 
 
 			if (!pbfIntegrateComputeProgram) return;
 			pbfIntegrateComputeProgram->use();
-			pbfIntegrateComputeProgram->setUint("particleCount", maxParticles);
+			pbfIntegrateComputeProgram->setUint("particleCount", simParticleCount);
 			pbfIntegrateComputeProgram->setVec3("boxMin", this->GRID_MIN);
 			pbfIntegrateComputeProgram->setVec3("boxMax", this->GRID_MAX);
 			pbfIntegrateComputeProgram->setFloat("particleRadius", this->PARTICLE_SIM_RADIUS);
@@ -1018,7 +1119,7 @@ void ParticleSystem::Update(float deltaTime, float wallDamping, bool enableSPH) 
 
 				if (!pbfXSPHComputeProgram) return;
 				pbfXSPHComputeProgram->use();
-				pbfXSPHComputeProgram->setUint("particleCount", maxParticles);
+				pbfXSPHComputeProgram->setUint("particleCount", simParticleCount);
 				pbfXSPHComputeProgram->setUint("gridResX", static_cast<uint32_t>(GRID_RES.x));
 				pbfXSPHComputeProgram->setUint("gridResY", static_cast<uint32_t>(GRID_RES.y));
 				pbfXSPHComputeProgram->setUint("gridResZ", static_cast<uint32_t>(GRID_RES.z));
@@ -1034,7 +1135,7 @@ void ParticleSystem::Update(float deltaTime, float wallDamping, bool enableSPH) 
 
 				if (!pbfXSPHApplyComputeProgram) return;
 				pbfXSPHApplyComputeProgram->use();
-				pbfXSPHApplyComputeProgram->setUint("particleCount", maxParticles);
+				pbfXSPHApplyComputeProgram->setUint("particleCount", simParticleCount);
 				timePbfGpu(PBF_XSPH_APPLY, [&]() {
 					pbfXSPHApplyComputeProgram->dispatch(groups, 1, 1);
 					glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
@@ -1042,7 +1143,7 @@ void ParticleSystem::Update(float deltaTime, float wallDamping, bool enableSPH) 
 
 				if (!pbfVorticityComputeProgram) return;
 				pbfVorticityComputeProgram->use();
-				pbfVorticityComputeProgram->setUint("particleCount", maxParticles);
+				pbfVorticityComputeProgram->setUint("particleCount", simParticleCount);
 				pbfVorticityComputeProgram->setUint("gridResX", static_cast<uint32_t>(GRID_RES.x));
 				pbfVorticityComputeProgram->setUint("gridResY", static_cast<uint32_t>(GRID_RES.y));
 				pbfVorticityComputeProgram->setUint("gridResZ", static_cast<uint32_t>(GRID_RES.z));
@@ -1057,7 +1158,7 @@ void ParticleSystem::Update(float deltaTime, float wallDamping, bool enableSPH) 
 
 				if (!pbfVorticityApplyComputeProgram) return;
 				pbfVorticityApplyComputeProgram->use();
-				pbfVorticityApplyComputeProgram->setUint("particleCount", maxParticles);
+				pbfVorticityApplyComputeProgram->setUint("particleCount", simParticleCount);
 				pbfVorticityApplyComputeProgram->setUint("gridResX", static_cast<uint32_t>(GRID_RES.x));
 				pbfVorticityApplyComputeProgram->setUint("gridResY", static_cast<uint32_t>(GRID_RES.y));
 				pbfVorticityApplyComputeProgram->setUint("gridResZ", static_cast<uint32_t>(GRID_RES.z));
@@ -1104,11 +1205,13 @@ void ParticleSystem::Update(float deltaTime, float wallDamping, bool enableSPH) 
 			}
 		}
 	}
-
 }
 
 
 void ParticleSystem::Render(const glm::mat4& mvp, const glm::vec3 &particleColor, float pointSize, const glm::vec2 &viewportSize, const glm::mat4& projection, const glm::mat4& view, const glm::vec3 &lightWorldPos) {
+	const GLsizei renderCount = static_cast<GLsizei>((spawnMode == SpawnMode::PourIntoContainer) ? activeParticleCount : static_cast<uint32_t>(maxParticles));
+	if (renderCount <= 0) return;
+
 	glBindVertexArray(vao);
 
 	renderShader->use();
@@ -1125,7 +1228,7 @@ void ParticleSystem::Render(const glm::mat4& mvp, const glm::vec3 &particleColor
 
 	renderShader->setVec2("densityMinMax", glm::vec2(restDensity * 0.2, restDensity * 1.5f));
 
-	glDrawArrays(GL_POINTS, 0, maxParticles);
+	glDrawArrays(GL_POINTS, 0, renderCount);
 	glBindVertexArray(0);
 
 }
@@ -1145,6 +1248,8 @@ void ParticleSystem::RenderBoundary(const glm::mat4& mvp, const glm::vec3& color
 
 void ParticleSystem::RenderFluidDepth(const glm::mat4& mvp, float pointSize, const glm::vec2& viewportSize, const glm::mat4& projection, const glm::mat4& view) {
 	if (!fluidDepthShader) return;
+	const GLsizei renderCount = static_cast<GLsizei>((spawnMode == SpawnMode::PourIntoContainer) ? activeParticleCount : static_cast<uint32_t>(maxParticles));
+	if (renderCount <= 0) return;
 	
 	glBindVertexArray(vao);
 	fluidDepthShader->use();
@@ -1153,12 +1258,14 @@ void ParticleSystem::RenderFluidDepth(const glm::mat4& mvp, float pointSize, con
 	fluidDepthShader->setMat4("view", view);
 	fluidDepthShader->setVec2("viewportSize", viewportSize);
 	fluidDepthShader->setFloat("pointSize", pointSize);
-	glDrawArrays(GL_POINTS, 0, maxParticles);
+	glDrawArrays(GL_POINTS, 0, renderCount);
 	glBindVertexArray(0);
 }
 
 void ParticleSystem::RenderFluidThickness(const glm::mat4& mvp, float pointSize, const glm::vec2& viewportSize, const glm::mat4& projection, const glm::mat4& view) {
 	if (!fluidThicknessShader) return;
+	const GLsizei renderCount = static_cast<GLsizei>((spawnMode == SpawnMode::PourIntoContainer) ? activeParticleCount : static_cast<uint32_t>(maxParticles));
+	if (renderCount <= 0) return;
 
 	glBindVertexArray(vao);
 	fluidThicknessShader->use();
@@ -1167,7 +1274,7 @@ void ParticleSystem::RenderFluidThickness(const glm::mat4& mvp, float pointSize,
 	fluidThicknessShader->setMat4("view", view);
 	fluidThicknessShader->setVec2("viewportSize", viewportSize);
 	fluidThicknessShader->setFloat("pointSize", pointSize);
-	glDrawArrays(GL_POINTS, 0, maxParticles);
+	glDrawArrays(GL_POINTS, 0, renderCount);
 	glBindVertexArray(0);
 
 }
@@ -1211,13 +1318,22 @@ void ParticleSystem::ResetParticles() {
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 	glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_VERTEX_ATTRIB_ARRAY_BARRIER_BIT);
 
+	if (spawnMode == SpawnMode::PourIntoContainer) {
+		activeParticleCount = 0;
+		pourSpawnAccumulator = 0.0f;
+	}
+	else {
+		activeParticleCount = static_cast<uint32_t>(maxParticles);
+	}
+
 }
 
 bool ParticleSystem::ReadbackParticles(std::vector<glm::vec4>& positions, std::vector<glm::vec4>& velocities) const {
 	if (ssboPos == 0 || ssboVel == 0) return false;
+	const size_t readCount = (spawnMode == SpawnMode::PourIntoContainer) ? static_cast<size_t>(activeParticleCount) : maxParticles;
 
-	positions.resize(maxParticles);
-	velocities.resize(maxParticles);
+	positions.resize(readCount);
+	velocities.resize(readCount);
 
 	glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssboPos);
 	glGetBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, positions.size() * sizeof(glm::vec4), positions.data());
