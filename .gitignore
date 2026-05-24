@@ -5,3 +5,5 @@ out/
 cmake-build-debug/
 vcpkg_installed/
 IMPORT_modelLog.txt
+_ref_nrf
+.ipynb_checkpoints
