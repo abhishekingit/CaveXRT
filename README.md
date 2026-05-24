@@ -2,7 +2,7 @@
 
 https://github.com/user-attachments/assets/e6982fb6-f765-4b64-af92-97f824352ae1
 
-CaveXRT (Compute Accelerated Visualization Engine — X for Experimental — Real Time) is a real-time GPU fluid simulation engine focused on comparing modern particle-based fluid simulation methods and rendering techniques. The engine implements both Smoothed Particle Hydrodynamics (SPH) and Position Based Fluids (PBF) entirely on the GPU using compute shaders, enabling interactive fluid simulation and visualization in real time.
+CaveXRT (Compute Accelerated Visualization Engine) is a real-time GPU fluid simulation engine focused on comparing modern particle-based fluid simulation methods and rendering techniques. The engine implements both Smoothed Particle Hydrodynamics (SPH) and Position Based Fluids (PBF) entirely on the GPU using compute shaders, enabling interactive fluid simulation and visualization in real time.
 
 To improve visual realism, the simulation is rendered using a screen-space fluid rendering pipeline with depth/thickness reconstruction and a Narrow Range Filter for smooth surface generation. The engine also includes tools for simulation recording and particle export, allowing simulations to be captured and integrated into external rendering and cinematic workflows.
 
